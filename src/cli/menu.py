@@ -1,20 +1,59 @@
-# Menu principal da aplicação.
-#
-# Responsabilidade: apresentar as opções ao utilizador no terminal,
-# ler a sua escolha e delegar a execução à opção correspondente.
-#
-# Lógica:
-#   - Tem uma lista de opções disponíveis (cada uma é um objeto com nome e ação)
-#   - Entra num loop: mostra o menu → lê input → executa a opção → repete
-#   - O loop termina quando o utilizador escolhe "Sair"
-#
-# Exemplo de output no terminal:
-#   === Sistema de Reconhecimento Industrial ===
-#   1. Testar câmara
-#   2. Definir ROIs
-#   3. Correr programa
-#   0. Sair
-#   Escolha: _
-#
-# Princípio: este ficheiro não sabe O QUE cada opção faz,
-# só sabe que as tem de mostrar e invocar. (Open/Closed)
+from __future__ import annotations
+
+from typing import Protocol
+
+
+class MenuOption(Protocol):
+    """Contrato que cada opção do menu tem de cumprir.
+
+    O Menu não sabe o que cada opção faz — só sabe que tem um nome
+    e que se pode executar. Adicionar uma nova opção não exige alterar Menu.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def run(self) -> None: ...
+
+
+class Menu:
+    """Loop principal do menu — apresenta opções, lê escolha e delega execução.
+
+    Recebe as opções por injeção para não depender de implementações concretas (DIP).
+    """
+
+    def __init__(self, options: list[MenuOption]) -> None:
+        # Dict por índice para lookup O(1) e sem else nos branches
+        self._options: dict[int, MenuOption] = {
+            i + 1: option for i, option in enumerate(options)
+        }
+
+    def run(self) -> None:
+        """Loop até o utilizador escolher sair (0)."""
+        while True:
+            self._show()
+            choice = self._read_choice()
+            if choice == 0:
+                print("A sair...")
+                return
+            self._execute(choice)
+
+    def _show(self) -> None:
+        print("\n=== Sistema de Reconhecimento Industrial ===")
+        for index, option in self._options.items():
+            print(f"  {index}. {option.name}")
+        print("  0. Sair")
+
+    def _read_choice(self) -> int:
+        """Lê a escolha do utilizador — devolve -1 se não for um número válido."""
+        raw = input("Escolha: ").strip()
+        if not raw.isdigit():
+            return -1
+        return int(raw)
+
+    def _execute(self, choice: int) -> None:
+        option = self._options.get(choice)
+        if option is None:
+            print(f"Opção '{choice}' não existe.")
+            return
+        option.run()
