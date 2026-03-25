@@ -1,0 +1,33 @@
+# Configurações gerais do sistema.
+# Alterar aqui sem tocar no código.
+
+camera:
+  index: 0              # índice da câmara USB (0=primeira, 1=segunda, ...)
+  width: 1280
+  height: 720
+
+detection:
+  model_path: "models/yolov26_hands.pt"
+  confidence_threshold: 0.5
+  use_mock: true        # true = usa MockDetector (enquanto modelo está em treino)
+
+tracking:
+  dwell_time_seconds: 0.5       # tempo mínimo na zona para confirmar tarefa
+  task_timeout_seconds: 30.0    # tempo máximo numa tarefa antes de forçar fecho
+                                 # cobre: pausas do operador e falhas de deteção
+  two_hands_zones:               # zonas que exigem as duas mãos em simultâneo
+    - "Zona Assembly"
+  cycle_zone_order:              # ordem das zonas que define um ciclo completo
+    - "Zona A"
+    - "Zona B"
+    - "Zona C"
+    - "Zona Assembly"
+    - "Zona Saída"
+  exit_zone: "Zona Saída"        # zona cuja conclusão fecha o ciclo
+
+dashboard:
+  data_path: "dashboard/data/metrics.json"
+  refresh_seconds: 1
+
+output:
+  excel_output_dir: "output/"

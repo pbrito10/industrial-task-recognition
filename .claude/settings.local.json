@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^$\")",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//home/pedrobrito/Projeto2/**)",
+      "Bash(done)",
+      "Bash(find /home/pedrobrito/Projeto2/src -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(gh auth:*)"
+    ]
+  }
+}
