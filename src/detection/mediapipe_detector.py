@@ -135,21 +135,27 @@ class MediapipeDetector(DetectorInterface):
         """Calcula a bounding box a partir dos extremos dos 21 landmarks.
 
         A Tasks API não devolve bbox — derivamos do min/max dos pontos.
-        Extrai x e y em duas passagens e aplica margem com clamp para não
-        ultrapassar os limites do frame.
         """
-        all_keypoints = keypoints.all()
-        x_coords = [kp.position.x for kp in all_keypoints]
-        y_coords = [kp.position.y for kp in all_keypoints]
-
-        min_x = max(0, min(x_coords) - _BOUNDING_BOX_MARGIN)
-        min_y = max(0, min(y_coords) - _BOUNDING_BOX_MARGIN)
-        max_x = min(width - 1, max(x_coords) + _BOUNDING_BOX_MARGIN)
-        max_y = min(height - 1, max(y_coords) + _BOUNDING_BOX_MARGIN)
-
+        x_coords, y_coords = self._extract_coords(keypoints)
+        min_x, max_x = self._clamp_range(x_coords, width)
+        min_y, max_y = self._clamp_range(y_coords, height)
         return BoundingBox(
             top_left=Point(x=min_x, y=min_y),
             bottom_right=Point(x=max_x, y=max_y),
+        )
+
+    @staticmethod
+    def _extract_coords(keypoints: KeypointCollection) -> tuple[list[int], list[int]]:
+        """Separa as coordenadas x e y de todos os landmarks."""
+        all_kp = keypoints.all()
+        return [kp.position.x for kp in all_kp], [kp.position.y for kp in all_kp]
+
+    @staticmethod
+    def _clamp_range(values: list[int], frame_max: int) -> tuple[int, int]:
+        """Aplica margem e clamp para não ultrapassar os limites do frame."""
+        return (
+            max(0, min(values) - _BOUNDING_BOX_MARGIN),
+            min(frame_max - 1, max(values) + _BOUNDING_BOX_MARGIN),
         )
 
     def release(self) -> None:

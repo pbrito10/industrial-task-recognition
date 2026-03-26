@@ -8,6 +8,7 @@ import numpy as np
 
 from src.detection.detector_interface import DetectorInterface
 from src.detection.hand_detection import HandDetection
+from src.detection.mediapipe_detector import MediapipeDetector
 from src.shared.hand_side import HandSide
 from src.video.camera import Camera
 
@@ -135,3 +136,26 @@ class TestCameraOption:
         h, w = frame.shape[:2]
         cv2.putText(frame, f"FPS: {fps:.1f}", (10, 25), _FONT, _OVERLAY_FONT_SCALE, (255, 255, 255), _FONT_THICKNESS)
         cv2.putText(frame, f"{w}x{h}", (10, 50), _FONT, _OVERLAY_FONT_SCALE, (255, 255, 255), _FONT_THICKNESS)
+
+
+def make_test_camera_option(
+    config: dict,
+    camera_factory: Callable[[], Camera],
+) -> TestCameraOption:
+    """Factory que constrói TestCameraOption a partir do dict do settings.yaml.
+
+    O detector_factory fica aqui encapsulado — main.py não precisa de saber
+    que existe um MediapipeDetector.
+    """
+    def detector_factory() -> DetectorInterface:
+        return MediapipeDetector(
+            model_path=config["detection"]["model_path"],
+            max_num_hands=config["detection"]["max_num_hands"],
+            min_detection_confidence=config["detection"]["min_detection_confidence"],
+            min_tracking_confidence=config["detection"]["min_tracking_confidence"],
+        )
+
+    return TestCameraOption(
+        camera_factory=camera_factory,
+        detector_factory=detector_factory,
+    )
