@@ -137,7 +137,7 @@ def definir_rois(config):
     repository = JsonRoiRepository(path=_ROI_PATH)
     drawer     = RoiDrawer(
         camera_factory=camera_factory,
-        zone_names=config["tracking"]["cycle_zone_order"],
+        zone_names=config["tracking"]["zones"],
     )
 
     result = drawer.draw(repository.load())

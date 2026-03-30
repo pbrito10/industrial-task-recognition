@@ -1,37 +1,51 @@
 [
   {
-    "name": "Zona A",
-    "x1": 51,
-    "y1": 55,
-    "x2": 232,
-    "y2": 273
+    "name": "Zona da Porca",
+    "x1": 18,
+    "y1": 27,
+    "x2": 93,
+    "y2": 118
   },
   {
-    "name": "Zona B",
-    "x1": 284,
-    "y1": 59,
-    "x2": 435,
-    "y2": 281
+    "name": "Zona do Chassi Inferior",
+    "x1": 126,
+    "y1": 33,
+    "x2": 200,
+    "y2": 121
   },
   {
-    "name": "Zona C",
-    "x1": 461,
-    "y1": 55,
-    "x2": 630,
-    "y2": 281
+    "name": "Zona das Rodas",
+    "x1": 236,
+    "y1": 31,
+    "x2": 350,
+    "y2": 115
   },
   {
-    "name": "Zona Assembly",
-    "x1": 15,
-    "y1": 307,
-    "x2": 292,
-    "y2": 454
+    "name": "Zona do Chassi Superior",
+    "x1": 377,
+    "y1": 29,
+    "x2": 451,
+    "y2": 122
   },
   {
-    "name": "Zona Saida",
-    "x1": 349,
-    "y1": 315,
-    "x2": 628,
-    "y2": 470
+    "name": "Zona do Parafuso",
+    "x1": 478,
+    "y1": 32,
+    "x2": 596,
+    "y2": 122
+  },
+  {
+    "name": "Zona de Montagem",
+    "x1": 31,
+    "y1": 190,
+    "x2": 348,
+    "y2": 450
+  },
+  {
+    "name": "Zona de Saida",
+    "x1": 421,
+    "y1": 203,
+    "x2": 618,
+    "y2": 442
   }
 ]

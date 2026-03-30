@@ -20,8 +20,7 @@ def run(detection_queue, stop_event, config, roi_path):
     from src.roi.json_roi_repository import JsonRoiRepository
     from src.video import frame_annotator
 
-    rois       = JsonRoiRepository(path=Path(roi_path)).load()
-    zone_names = config["tracking"]["cycle_zone_order"]
+    rois = JsonRoiRepository(path=Path(roi_path)).load()
 
     # TODO: inicializar ZoneClassifier, TaskStateMachine e CycleTracker
 
@@ -38,7 +37,7 @@ def run(detection_queue, stop_event, config, roi_path):
             frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
             frame_annotator.draw_detections(frame_bgr, maos)
-            frame_annotator.draw_rois(frame_bgr, rois, zone_names)
+            frame_annotator.draw_rois(frame_bgr, rois)
 
             # TODO: classificar zonas → atualizar state machine → mostrar métricas
 

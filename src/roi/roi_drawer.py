@@ -119,7 +119,6 @@ def _draw_preview(frame: np.ndarray, session: _SessionState) -> None:
 
     roi   = _compute_drawing_roi("preview", drag.start, current)
     color = frame_annotator.zone_color(
-        session.selection.names,
         session.selection.names[session.selection.index],
     )
     cv2.rectangle(
@@ -134,7 +133,7 @@ def _draw_ui_overlay(frame: np.ndarray, session: _SessionState) -> None:
     """Mostra zona selecionada e avisos no topo do frame."""
     if session.selection.index is not None:
         zone  = session.selection.names[session.selection.index]
-        color = frame_annotator.zone_color(session.selection.names, zone)
+        color = frame_annotator.zone_color(zone)
         cv2.putText(frame, f"Zona: {zone}", (10, 30), _FONT, 0.8, color, 2)
 
     warning = session.mouse.drag.warning if isinstance(session.mouse.drag, _IdleState) else None
@@ -151,8 +150,7 @@ def _render(frame: np.ndarray, rois: RoiCollection, session: _SessionState) -> N
         else None
     )
 
-    frame_annotator.draw_rois(frame, rois, session.selection.names,
-                               selected_name=selected_name)
+    frame_annotator.draw_rois(frame, rois, selected_name=selected_name)
     _draw_preview(frame, session)
     _draw_ui_overlay(frame, session)
 

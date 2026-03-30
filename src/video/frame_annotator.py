@@ -31,26 +31,26 @@ _HAND_COLORS: dict[HandSide, tuple[int, int, int]] = {
     HandSide.RIGHT: (0, 200, 50),
 }
 
-# Cores por índice de zona (BGR)
-_ZONE_COLORS: list[tuple[int, int, int]] = [
-    (50, 205, 50),
-    (30, 144, 255),
-    (0, 140, 255),
-    (180, 105, 255),
-    (0, 215, 255),
-    (147, 20, 255),
-    (0, 250, 154),
-    (0, 165, 255),
-    (255, 191, 0),
-]
+# Cores fixas por nome de zona (BGR)
+_ZONE_COLOR_DEFAULT  = (50, 205, 50)    # verde — zonas de recolha de peças
+_ZONE_COLOR_ASSEMBLY = (0, 165, 255)    # laranja — zona de montagem
+_ZONE_COLOR_EXIT     = (255, 100, 0)    # azul — zona de saída
+
+_ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
+    "Zona de Montagem": _ZONE_COLOR_ASSEMBLY,
+    "Zona de Saida":    _ZONE_COLOR_EXIT,
+}
 
 
 # ── Funções auxiliares (privadas) ────────────────────────────────────────────
 
-def zone_color(zone_names: list[str], name: str) -> tuple[int, int, int]:
-    """Devolve a cor BGR associada ao nome da zona, baseada no índice em zone_names."""
-    index = zone_names.index(name) if name in zone_names else 0
-    return _ZONE_COLORS[index % len(_ZONE_COLORS)]
+def zone_color(name: str) -> tuple[int, int, int]:
+    """Devolve a cor BGR associada ao nome da zona.
+
+    Zonas especiais (montagem, saída) têm cor própria.
+    Todas as outras zonas de recolha são verdes.
+    """
+    return _ZONE_COLOR_MAP.get(name, _ZONE_COLOR_DEFAULT)
 
 
 # ── API pública ──────────────────────────────────────────────────────────────
@@ -114,7 +114,6 @@ def draw_roi(
 def draw_rois(
     frame: np.ndarray,
     rois: RoiCollection,
-    zone_names: list[str],
     *,
     selected_name: str | None = None,
 ) -> None:
@@ -124,7 +123,7 @@ def draw_rois(
         selected_name: Nome da ROI ativa (contorno mais espesso).
     """
     for roi in rois.all():
-        color = zone_color(zone_names, roi.name)
+        color = zone_color(roi.name)
         draw_roi(frame, roi, color, selected=roi.name == selected_name)
 
 
