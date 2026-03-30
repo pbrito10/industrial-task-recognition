@@ -75,7 +75,8 @@ def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
     br = detection.bounding_box.bottom_right
     cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), color, _LINE_THICKNESS)
 
-    label = f"{detection.hand_side.value}  {detection.confidence.as_percentage():.0f}%"
+    flipped_side = HandSide.RIGHT if detection.hand_side == HandSide.LEFT else HandSide.LEFT
+    label = f"{flipped_side.value}  {detection.confidence.as_percentage():.0f}%"
     cv2.putText(frame, label, (tl.x, tl.y - 8), _FONT, 0.5, color, 1)
 
 

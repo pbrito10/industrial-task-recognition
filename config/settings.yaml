@@ -3,8 +3,8 @@
 
 camera:
   index: 0              # índice da câmara USB (0=primeira, 1=segunda, ...)
-  width: 1280
-  height: 720
+  width: 640
+  height: 480
 
 detection:
   model_path: "models/hand_landmarker.task"

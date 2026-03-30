@@ -37,6 +37,7 @@ def run(frame_queue, stop_event, config):
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.flip(frame_rgb,1)
 
             # Descarta o frame mais antigo se a queue estiver cheia
             if frame_queue.full():
