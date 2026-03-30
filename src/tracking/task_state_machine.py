@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Máquina de estados que decide qual a tarefa em curso.
 #
 # Responsabilidade: receber, frame a frame, a zona onde as mãos estão

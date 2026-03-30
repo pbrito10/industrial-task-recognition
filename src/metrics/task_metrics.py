@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Agrega e mantém as métricas de uma zona/tarefa específica.
 #
 # Responsabilidade: para uma zona (ex: "Zona A"), guardar todos os

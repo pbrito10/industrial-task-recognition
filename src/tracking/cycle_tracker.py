@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Rastreia ciclos completos de montagem.
 #
 # Responsabilidade: a partir dos TaskEvents emitidos pela TaskStateMachine,

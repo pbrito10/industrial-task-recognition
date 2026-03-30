@@ -15,7 +15,11 @@ class DetectorInterface(ABC):
 
     @abstractmethod
     def detect(self, frame: np.ndarray) -> list[HandDetection]:
-        """Recebe um frame BGR do OpenCV e devolve as mãos detetadas."""
+        """Recebe um frame RGB e devolve as mãos detetadas.
+
+        O frame chega sempre em RGB — a conversão BGR→RGB é feita
+        no processo da câmara antes de entrar na queue.
+        """
         ...
 
     @abstractmethod

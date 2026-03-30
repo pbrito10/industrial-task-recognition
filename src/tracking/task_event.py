@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Value object que representa uma tarefa concluída (ou interrompida).
 #
 # Responsabilidade: transportar os dados de uma tarefa terminada

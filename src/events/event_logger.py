@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Escreve eventos de zona num ficheiro CSV em tempo real durante a sessão.
 #
 # Responsabilidade: receber ZoneEvents e persistir cada um como uma linha

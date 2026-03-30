@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Calcula as métricas agregadas a partir dos eventos registados.
 #
 # Responsabilidade: receber TaskEvents e produzir as métricas completas

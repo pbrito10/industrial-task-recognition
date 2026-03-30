@@ -11,4 +11,4 @@
 #   - Filtra deteções abaixo do threshold de confiança (configurável)
 #
 # Nota: este ficheiro só é instanciado quando o .pt estiver disponível.
-# Enquanto o modelo está em treino, o sistema usa MockDetector.
+# Enquanto o modelo não está disponível, o sistema usa MediapipeDetector.

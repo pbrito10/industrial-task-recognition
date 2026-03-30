@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Agrega e mantém as métricas dos ciclos completos.
 #
 # Responsabilidade: para os ciclos completos observados, guardar

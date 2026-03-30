@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import cv2
+import numpy as np
+
+from src.detection.hand_detection import HandDetection
+from src.roi.region_of_interest import RegionOfInterest
+from src.roi.roi_collection import RoiCollection
+from src.shared.hand_side import HandSide
+
+# ── Constantes visuais ───────────────────────────────────────────────────────
+
+_FONT = cv2.FONT_HERSHEY_SIMPLEX
+_LINE_THICKNESS = 2
+_KEYPOINT_RADIUS = 4
+_FILL_ALPHA = 0.2
+
+# Ligações entre landmarks que formam o esqueleto da mão (convenção MediaPipe)
+_HAND_CONNECTIONS = [
+    (0, 1), (1, 2), (2, 3), (3, 4),        # Polegar
+    (0, 5), (5, 6), (6, 7), (7, 8),        # Indicador
+    (0, 9), (9, 10), (10, 11), (11, 12),   # Médio
+    (0, 13), (13, 14), (14, 15), (15, 16), # Anelar
+    (0, 17), (17, 18), (18, 19), (19, 20), # Mindinho
+    (5, 9), (9, 13), (13, 17),             # Palma
+]
+
+# Cores por lado da mão (BGR)
+_HAND_COLORS: dict[HandSide, tuple[int, int, int]] = {
+    HandSide.LEFT: (255, 100, 0),
+    HandSide.RIGHT: (0, 200, 50),
+}
+
+# Cores por índice de zona (BGR)
+_ZONE_COLORS: list[tuple[int, int, int]] = [
+    (50, 205, 50),
+    (30, 144, 255),
+    (0, 140, 255),
+    (180, 105, 255),
+    (0, 215, 255),
+    (147, 20, 255),
+    (0, 250, 154),
+    (0, 165, 255),
+    (255, 191, 0),
+]
+
+
+# ── Funções auxiliares (privadas) ────────────────────────────────────────────
+
+def zone_color(zone_names: list[str], name: str) -> tuple[int, int, int]:
+    """Devolve a cor BGR associada ao nome da zona, baseada no índice em zone_names."""
+    index = zone_names.index(name) if name in zone_names else 0
+    return _ZONE_COLORS[index % len(_ZONE_COLORS)]
+
+
+# ── API pública ──────────────────────────────────────────────────────────────
+
+def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
+    """Desenha esqueleto, keypoints e bounding box de uma mão."""
+    color = _HAND_COLORS[detection.hand_side]
+    keypoints = detection.keypoints
+
+    # Linhas do esqueleto
+    for start_idx, end_idx in _HAND_CONNECTIONS:
+        start = keypoints.by_index(start_idx).position
+        end = keypoints.by_index(end_idx).position
+        cv2.line(frame, (start.x, start.y), (end.x, end.y), color, _LINE_THICKNESS)
+
+    # Keypoints
+    for kp in keypoints.all():
+        cv2.circle(frame, (kp.position.x, kp.position.y), _KEYPOINT_RADIUS, color, -1)
+
+    # Bounding box + label
+    tl = detection.bounding_box.top_left
+    br = detection.bounding_box.bottom_right
+    cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), color, _LINE_THICKNESS)
+
+    label = f"{detection.hand_side.value}  {detection.confidence.as_percentage():.0f}%"
+    cv2.putText(frame, label, (tl.x, tl.y - 8), _FONT, 0.5, color, 1)
+
+
+def draw_detections(frame: np.ndarray, detections: list[HandDetection]) -> None:
+    """Desenha todas as deteções de mãos no frame."""
+    for detection in detections:
+        draw_hand(frame, detection)
+
+
+def draw_roi(
+    frame: np.ndarray,
+    roi: RegionOfInterest,
+    color: tuple[int, int, int],
+    *,
+    selected: bool = False,
+) -> None:
+    """Desenha uma ROI com preenchimento semi-transparente, contorno e label.
+
+    Se `selected=True`, o contorno é mais espesso para indicar zona ativa.
+    """
+    tl = (roi.top_left.x, roi.top_left.y)
+    br = (roi.bottom_right.x, roi.bottom_right.y)
+
+    # Preenchimento semi-transparente
+    overlay = frame.copy()
+    cv2.rectangle(overlay, tl, br, color, -1)
+    cv2.addWeighted(overlay, _FILL_ALPHA, frame, 1 - _FILL_ALPHA, 0, frame)
+
+    # Contorno (mais espesso se selecionada)
+    cv2.rectangle(frame, tl, br, color, 2 if not selected else 3)
+
+    cv2.putText(frame, roi.name, (tl[0] + 5, tl[1] + 20), _FONT, 0.6, color, 2)
+
+
+def draw_rois(
+    frame: np.ndarray,
+    rois: RoiCollection,
+    zone_names: list[str],
+    *,
+    selected_name: str | None = None,
+) -> None:
+    """Desenha todas as ROIs da coleção.
+
+    Args:
+        selected_name: Nome da ROI ativa (contorno mais espesso).
+    """
+    for roi in rois.all():
+        color = zone_color(zone_names, roi.name)
+        draw_roi(frame, roi, color, selected=roi.name == selected_name)
+
+
+def draw_fps(frame: np.ndarray, fps: float) -> None:
+    """Mostra FPS e resolução no canto superior esquerdo."""
+    h, w = frame.shape[:2]
+    cv2.putText(frame, f"FPS: {fps:.1f}", (10, 25), _FONT, 0.6, (255, 255, 255), 1)
+    cv2.putText(frame, f"{w}x{h}", (10, 50), _FONT, 0.6, (255, 255, 255), 1)

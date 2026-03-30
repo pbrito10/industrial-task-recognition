@@ -1,9 +1,11 @@
+# TODO: implementar
+#
 # Value object que representa um evento de entrada ou saída de uma zona.
 #
 # Responsabilidade: transportar todos os dados de um único evento
 # de forma imutável — é o "átomo" de informação do sistema.
 #
-# Um evento é gerado pelo FrameProcessor sempre que uma mão:
+# Um evento é gerado pelo pipeline.py (via TaskStateMachine) sempre que uma mão:
 #   - Entra numa zona (ENTER) — após o dwell time ser cumprido
 #   - Sai de uma zona (EXIT)  — quando a mão deixa de estar na zona
 #   - Timeout               — quando a tarefa é forçada a fechar

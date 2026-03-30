@@ -23,8 +23,8 @@ tracking:
     - "Zona B"
     - "Zona C"
     - "Zona Assembly"
-    - "Zona Saída"
-  exit_zone: "Zona Saída"        # zona cuja conclusão fecha o ciclo
+    - "Zona Saida"
+  exit_zone: "Zona Saida"        # zona cuja conclusão fecha o ciclo
 
 dashboard:
   data_path: "dashboard/data/metrics.json"

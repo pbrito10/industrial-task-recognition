@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 
-import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks import python as mp_python
@@ -57,16 +56,18 @@ class MediapipeDetector(DetectorInterface):
         self._landmarker = mp_vision.HandLandmarker.create_from_options(options)
 
     def detect(self, frame: np.ndarray) -> list[HandDetection]:
-        """Processa um frame BGR e devolve as mãos detetadas.
+        """Processa um frame RGB e devolve as mãos detetadas.
+
+        Recebe o frame já em RGB — a conversão BGR→RGB é feita no processo
+        da câmara (camera.py) antes de entrar na queue.
 
         VIDEO mode exige timestamps em ms monotonicamente crescentes —
         usamos time.monotonic() para garantir isso independentemente do relógio do sistema.
         """
         height, width = frame.shape[:2]
 
-        # Tasks API exige imagem RGB contígua em memória
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        # Tasks API exige imagem RGB — o frame já chega nesse formato
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
 
         timestamp_ms = int(time.monotonic() * 1000)
         result = self._landmarker.detect_for_video(mp_image, timestamp_ms)

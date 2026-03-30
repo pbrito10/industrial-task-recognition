@@ -17,9 +17,9 @@ env/
 # Models
 models/
 
-# Output
-output/
-dashboard/data/
+# Output (pasta gerada em runtime — não é código fonte)
+/output/
+/dashboard/data/
 
 # IDE
 .idea/

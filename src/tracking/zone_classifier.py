@@ -1,3 +1,5 @@
+# TODO: implementar
+#
 # Classifica em que zona estão as mãos detetadas.
 #
 # Responsabilidade: receber as HandDetections de um frame e determinar
