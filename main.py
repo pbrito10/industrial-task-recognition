@@ -30,6 +30,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 import subprocess
+import sys
 import time
 from multiprocessing import Event, Process, Queue, set_start_method
 from pathlib import Path
@@ -184,7 +185,7 @@ def correr_programa(config):
 
     app_path       = Path(__file__).parent / "dashboard" / "app.py"
     dashboard_proc = subprocess.Popen(
-        ["streamlit", "run", str(app_path)],
+        [sys.executable, "-m", "streamlit", "run", str(app_path)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
