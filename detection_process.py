@@ -1,19 +1,11 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# PROCESSO: Detector de mãos (MediaPipe)
+# frame_queue → MediaPipe → detection_queue (frame + lista de HandDetection)
 #
-# O que faz : deteta mãos em cada frame e envia o resultado para o próximo bloco
-# Recebe    : frame          ←  frame_queue      (numpy array RGB)
-# Envia     : (frame, mãos)  →  detection_queue
-#             onde "mãos" é uma lista de HandDetection
+# Frame e deteções são emitidos juntos para garantir sincronismo: o consumidor
+# (display ou monitor) precisa do frame exato em que as mãos foram detetadas,
+# não de um frame mais recente com deteções de um frame mais antigo.
 #
-# Porquê enviar o frame junto com as deteções?
-#   O bloco seguinte (display ou pipeline) precisa do frame para desenhar.
-#   Agrupá-los aqui garante que frame e deteções são sempre do mesmo instante.
-#
-# Porquê timeout=0.1 no queue.get()?
-#   Sem timeout, o get() bloquearia para sempre se a câmara parasse.
-#   Com 100ms de timeout, o loop verifica o stop_event regularmente.
-# ═══════════════════════════════════════════════════════════════════════════════
+# O get() com timeout=0.1 s serve para que o loop verifique stop_event
+# regularmente em vez de bloquear indefinidamente se a câmara parar.
 
 
 def run(frame_queue, detection_queue, stop_event, config):
@@ -37,11 +29,10 @@ def run(frame_queue, detection_queue, stop_event, config):
 
             maos = detector.detect(frame)
 
-            # Descarta o resultado se a queue estiver cheia — evita bloquear
-            # quando o consumidor parou (ex: stop_event ativo).
             try:
                 detection_queue.put((frame, maos), timeout=0.1)
             except queue.Full:
+                # O consumidor está lento (ou parou) — descartamos em vez de bloquear
                 pass
     finally:
         detector.release()

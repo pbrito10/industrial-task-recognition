@@ -26,23 +26,16 @@ _COLUMNS = [
 
 
 class DebugLogger:
-    """Regista todos os eventos relevantes do pipeline num CSV em tempo real.
+    """CSV em tempo real com todos os eventos do pipeline.
 
-    Cobre cinco tipos de evento:
-      ZONE_ENTER     — mão entrou numa zona (detetado pelo ZoneClassifier)
-      ZONE_EXIT      — mão saiu de uma zona
-      TASK_COMPLETE  — tarefa confirmada (dwell completo, was_forced=False)
-      TASK_TIMEOUT   — tarefa cancelada por timeout (was_forced=True)
-      CYCLE_COMPLETE — ciclo fechado na zona de saída; inclui order_ok
+    Cada linha é descarregada para disco imediatamente — se o processo terminar
+    de forma inesperada, os dados até ao último frame ficam preservados.
 
-    Cada linha é escrita e descarregada imediatamente — se o programa fechar
-    inesperadamente os dados chegam na mesma ao disco.
-
-    Uso:
-        with DebugLogger(output_dir, session_start) as logger:
-            logger.log_zone_enter(...)
-            logger.log_task_complete(...)
-            logger.log_cycle_complete(...)
+    Cinco tipos de evento cobrem o ciclo de vida completo:
+      ZONE_ENTER / ZONE_EXIT  — transições detetadas pelo ZoneClassifier
+      TASK_COMPLETE           — dwell expirou, mão saiu normalmente
+      TASK_TIMEOUT            — tarefa fechada por timeout (was_forced=True)
+      CYCLE_COMPLETE          — zona de saída concluída; inclui order_ok
     """
 
     def __init__(self, output_dir: Path, session_start: datetime) -> None:
@@ -55,8 +48,6 @@ class DebugLogger:
 
         self._writer.writeheader()
         self._file.flush()
-
-    # ── Zona ─────────────────────────────────────────────────────────────────
 
     def log_zone_enter(
         self,
@@ -78,19 +69,13 @@ class DebugLogger:
     ) -> None:
         self._write_zone_row("ZONE_EXIT", timestamp, relative_time, zone_name, detection, frame_idx)
 
-    # ── Tarefa ────────────────────────────────────────────────────────────────
-
     def log_task_complete(self, task_event: TaskEvent) -> None:
         self._write_task_row("TASK_COMPLETE", task_event)
 
     def log_task_timeout(self, task_event: TaskEvent) -> None:
         self._write_task_row("TASK_TIMEOUT", task_event)
 
-    # ── Ciclo ─────────────────────────────────────────────────────────────────
-
     def log_cycle_complete(self, cycle_result: CycleResult) -> None:
-        """Regista o fecho de um ciclo com duração, número e verificação de ordem."""
-        relative = self._session_start  # placeholder; usamos end_time via duration
         self._write({
             "timestamp_iso":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3],
             "relative_time_s": "",
@@ -103,10 +88,8 @@ class DebugLogger:
             "frame_idx":       "",
             "duration_s":      round(cycle_result.duration.total_seconds(), 3),
             "cycle_number":    cycle_result.cycle_number,
-            "order_ok":        "true" if cycle_result.order_ok else "false",
+            "order_ok":        str(cycle_result.order_ok).lower(),
         })
-
-    # ── Internos ──────────────────────────────────────────────────────────────
 
     def _write_zone_row(
         self,
@@ -153,8 +136,6 @@ class DebugLogger:
     def _write(self, row: dict) -> None:
         self._writer.writerow(row)
         self._file.flush()
-
-    # ── Context manager ───────────────────────────────────────────────────────
 
     def close(self) -> None:
         self._file.close()

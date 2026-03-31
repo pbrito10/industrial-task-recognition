@@ -53,8 +53,12 @@ def _render_summary(data: dict) -> None:
     out_of_order = cycles.get("count_out_of_order", 0)
 
     c1, c2, c3, c4 = st.columns(4)
+    avg_display = "—"
+    if avg_s:
+        avg_display = _fmt_seconds(avg_s)
+
     c1.metric("Ciclos completos",     count)
-    c2.metric("Tempo médio de ciclo", _fmt_seconds(avg_s) if avg_s else "—")
+    c2.metric("Tempo médio de ciclo", avg_display)
     c3.metric("Ordem correta",        f"{in_order} / {count}")
     c4.metric("Duração da sessão",    _fmt_seconds(duration))
 
@@ -96,7 +100,9 @@ def _render_zone_table(data: dict) -> None:
     df = pd.DataFrame(rows).set_index("Zona")
 
     def _highlight(row):
-        bg = "background-color: #ff4b4b33" if row.name == bottleneck else ""
+        bg = ""
+        if row.name == bottleneck:
+            bg = "background-color: #ff4b4b33"
         return [bg] * len(row)
 
     styled = (
@@ -167,9 +173,10 @@ def main() -> None:
 
     if data is None:
         st.info("A aguardar dados do pipeline...")
-    else:
-        _render(data)
+        time.sleep(refresh)
+        st.rerun()
 
+    _render(data)
     time.sleep(refresh)
     st.rerun()
 

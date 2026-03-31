@@ -7,13 +7,14 @@ from src.tracking.task_event import TaskEvent
 
 
 def _matches_order(actual: list[str], expected: list[str]) -> bool:
-    """Verifica se a sequência real segue a ordem esperada.
+    """Verifica se a sequência real respeita a ordem esperada.
 
-    Regras:
-      - Cada zona esperada deve ser visitada antes de avançar para a seguinte.
-      - Uma zona pode ser visitada múltiplas vezes consecutivas antes de avançar
-        (ex: "Zona das Rodas" visitada 3 vezes antes da zona seguinte).
-      - Saltar uma zona ou ir a uma zona errada devolve False.
+    Permite repetições consecutivas da mesma zona (ex: o operador vai três
+    vezes às Rodas antes de avançar) mas não permite saltar zonas nem
+    visitá-las fora de ordem.
+
+    Algoritmo de ponteiro único: ptr aponta para a zona esperada atual.
+    Ao encontrar a zona seguinte, avança o ptr. Qualquer outra zona falha.
     """
     if not expected:
         return True
@@ -21,30 +22,30 @@ def _matches_order(actual: list[str], expected: list[str]) -> bool:
         return False
 
     ptr             = 0
-    entered_current = False  # a zona expected[ptr] foi visitada pelo menos uma vez?
+    entered_current = False
 
     for zone in actual:
         if zone == expected[ptr]:
             entered_current = True
-        elif entered_current and ptr + 1 < len(expected) and zone == expected[ptr + 1]:
+            continue
+        if entered_current and ptr + 1 < len(expected) and zone == expected[ptr + 1]:
             ptr            += 1
             entered_current = True
-        else:
-            return False
+            continue
+        return False
 
     return entered_current and ptr == len(expected) - 1
 
 
 class CycleTracker:
-    """Deteta ciclos completos de montagem a partir dos TaskEvents.
+    """Deteta ciclos completos acumulando TaskEvents até à zona de saída.
 
-    Um ciclo fecha quando a zona de saída é concluída (was_forced=False).
-    A duração é medida desde o início da primeira tarefa do ciclo até ao
-    fim da tarefa de saída.
+    Um ciclo só fecha quando a zona de saída é concluída normalmente
+    (was_forced=False). Timeouts acumulam-se no ciclo mas não o fecham —
+    uma interrupção não é uma saída real.
 
-    Tarefas was_forced=True são acumuladas no ciclo mas não o fecham —
-    uma interrupção não equivale a uma saída real — e não entram na
-    verificação de ordem.
+    Tarefas was_forced=True também são excluídas da validação de ordem,
+    porque representam tempo de espera, não passos de montagem.
     """
 
     def __init__(self, exit_zone: str, expected_order: list[str]) -> None:
@@ -54,7 +55,7 @@ class CycleTracker:
         self._completed_cycles: int             = 0
 
     def record(self, event: TaskEvent) -> CycleResult | None:
-        """Regista um TaskEvent. Devolve CycleResult se o ciclo ficou completo."""
+        """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
         self._tasks_in_cycle.append(event)
 
         if self._is_cycle_complete(event):

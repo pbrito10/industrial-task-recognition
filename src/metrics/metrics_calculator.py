@@ -10,50 +10,50 @@ from src.tracking.task_event import TaskEvent
 
 
 class MetricsCalculator:
-    """Agrega TaskEvents em métricas online — atualiza a cada evento recebido.
+    """Agrega eventos em métricas online à medida que chegam do pipeline.
 
-    Separa automaticamente was_forced=True (interrupções) de was_forced=False
-    (tarefas reais). O chamador não precisa de filtrar antes de chamar record().
+    A separação produtivo/interrupção é feita aqui com base em was_forced:
+      - False → tarefa concluída normalmente → tempo produtivo
+      - True  → tarefa fechada por timeout   → tempo de interrupção
 
-    snapshot() pode ser chamado a qualquer momento — devolve o estado atual
-    sem modificar o calculador.
+    O tempo de transição não é medido diretamente — é o que sobra:
+    sessão total − produtivo − interrupção. Pode incluir tempo entre zonas,
+    hesitações do operador, ou qualquer período sem mão detetada.
     """
 
     def __init__(self, session_start: datetime, zone_names: list[str]) -> None:
         self._session_start = session_start
 
-        # Uma instância de TaskMetrics por zona — só tarefas was_forced=False
         self._task_metrics: dict[str, TaskMetrics] = {
             name: TaskMetrics() for name in zone_names
         }
-        self._cycle_metrics    = CycleMetrics()
-        self._productive_time  = timedelta(0)
+        self._cycle_metrics     = CycleMetrics()
+        self._productive_time   = timedelta(0)
         self._interruption_time = timedelta(0)
 
     def record(self, event: TaskEvent) -> None:
-        """Regista um TaskEvent e atualiza as métricas internas."""
         if event.was_forced:
             self._interruption_time += event.duration
             return
 
         self._productive_time += event.duration
 
-        # Cria entrada para zonas não previstas inicialmente (robustez)
+        # Zonas não previstas em settings.yaml chegam aqui se o operador
+        # visitar uma zona fora do conjunto configurado — criamos a entrada
+        # em vez de ignorar ou lançar excepção.
         if event.zone_name not in self._task_metrics:
             self._task_metrics[event.zone_name] = TaskMetrics()
 
         self._task_metrics[event.zone_name].add(event.duration)
 
     def record_cycle(self, cycle_result: CycleResult) -> None:
-        """Regista a duração e a verificação de ordem de um ciclo completo."""
         self._cycle_metrics.add(cycle_result.duration, cycle_result.order_ok)
 
     def snapshot(self) -> MetricsSnapshot:
-        """Devolve um snapshot imutável do estado atual das métricas."""
-        now             = datetime.now()
+        now              = datetime.now()
         session_duration = now - self._session_start
-        transition_time = self._transition_time(session_duration)
-        percentages     = self._percentages(session_duration)
+        transition_time  = self._transition_time(session_duration)
+        percentages      = self._percentages(session_duration)
 
         return MetricsSnapshot(
             task_metrics=dict(self._task_metrics),
@@ -70,25 +70,24 @@ class MetricsCalculator:
         )
 
     def _transition_time(self, session_duration: timedelta) -> timedelta:
-        """Tempo em que a mão não estava em nenhuma zona ativa."""
         transition = session_duration - self._productive_time - self._interruption_time
-
-        # Garante que não fica negativo por variações de timing
+        # Pequenas variações de timing podem dar resultado ligeiramente negativo
         return max(transition, timedelta(0))
 
     def _percentages(self, session_duration: timedelta) -> tuple[float, float, float]:
-        """Devolve (produtivo%, transição%, interrupção%) — somam 100%."""
+        """Devolve (produtivo%, transição%, interrupção%) garantindo soma de 100%."""
         total_seconds = session_duration.total_seconds()
         if total_seconds == 0:
             return 0.0, 0.0, 0.0
 
         productive   = self._productive_time.total_seconds()   / total_seconds * 100
         interruption = self._interruption_time.total_seconds() / total_seconds * 100
+        # Transição calculada como complemento para garantir que os três somam 100%
         transition   = max(0.0, 100.0 - productive - interruption)
         return productive, transition, interruption
 
     def _bottleneck_zone(self) -> str | None:
-        """Zona com maior tempo médio — None se ainda não há dados."""
+        """Zona com maior tempo médio de tarefa — None se ainda não há dados."""
         zones_with_data = [
             (name, metrics)
             for name, metrics in self._task_metrics.items()

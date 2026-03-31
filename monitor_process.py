@@ -1,46 +1,20 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# PROCESSO: Monitor principal
+# Pipeline principal: classifica zonas, atualiza a state machine,
+# calcula métricas e escreve outputs em tempo real.
 #
-# O que faz : classifica zonas, atualiza a state machine, calcula métricas
-#             e mostra o feed com ROIs e keypoints
-# Recebe    : (frame, mãos)  ←  detection_queue
-# Envia     : nada (é o último bloco neste modo)
-#
-# Usado em  : Correr Programa
-#             capture_process → detection_process → [monitor_process]
-#
-# No final da sessão (q ou Ctrl+C): exporta Excel e atualiza dashboard.
-# ═══════════════════════════════════════════════════════════════════════════════
+# Este módulo é carregado num processo filho (spawn) — todos os imports
+# ficam dentro das funções para evitar carregar dependências pesadas
+# (OpenCV, MediaPipe) no processo pai sem necessidade.
 
 
 def run(detection_queue, stop_event, config, roi_path):
-    import queue
-    from datetime import datetime, timedelta
-    from pathlib import Path
-
-    import cv2
-
-    from src.events.debug_logger import DebugLogger
-    from src.metrics.metrics_calculator import MetricsCalculator
-    from src.output.dashboard_writer import DashboardWriter
-    from src.output.excel_exporter import ExcelExporter
-    from src.roi.json_roi_repository import JsonRoiRepository
-    from src.tracking.activation_strategy import StillnessDwellStrategy
-    from src.tracking.cycle_tracker import CycleTracker
-    from src.tracking.task_state_machine import (
-        OneHandStateMachine, TaskStateMachine, TwoHandsStateMachine,
-    )
-    from src.tracking.zone_classifier import ZoneClassifier
-    from src.video import frame_annotator
-
     _MonitorSession(config, roi_path).execute(detection_queue, stop_event)
 
 
 class _MonitorSession:
-    """Encapsula o estado e o comportamento de uma sessão de monitorização.
+    """Encapsula o estado de uma sessão de monitorização.
 
-    Cada método tem uma responsabilidade única — a complexidade do pipeline
-    fica distribuída em peças pequenas em vez de concentrada num único run().
+    Cada método trata de uma responsabilidade — o loop principal fica
+    limpo e cada peça pode ser testada isoladamente.
     """
 
     def __init__(self, config: dict, roi_path: str) -> None:
@@ -64,28 +38,27 @@ class _MonitorSession:
         self._last_dashboard_write  = datetime.min
         self._last_detection_per_zone: dict = {}
 
-        rois                     = JsonRoiRepository(path=Path(roi_path)).load()
-        self._rois               = rois
-        self._zone_classifier    = ZoneClassifier(rois)
+        rois                  = JsonRoiRepository(path=Path(roi_path)).load()
+        self._rois            = rois
+        self._zone_classifier = ZoneClassifier(rois)
 
         dwell_time    = timedelta(seconds=config["tracking"]["dwell_time_seconds"])
         task_timeout  = timedelta(seconds=config["tracking"]["task_timeout_seconds"])
         strategy      = StillnessDwellStrategy(config["tracking"]["stillness_threshold_px"])
         self._refresh_interval = timedelta(seconds=config["dashboard"]["refresh_seconds"])
 
-        self._cycle_tracker        = CycleTracker(
+        self._cycle_tracker    = CycleTracker(
             exit_zone=config["tracking"]["exit_zone"],
             expected_order=config["tracking"]["cycle_zone_order"],
         )
-        self._metrics              = MetricsCalculator(self._session_start, config["tracking"]["zones"])
-        self._dashboard_writer     = DashboardWriter(Path(config["dashboard"]["data_path"]))
-        self._excel_exporter       = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
+        self._metrics          = MetricsCalculator(self._session_start, config["tracking"]["zones"])
+        self._dashboard_writer = DashboardWriter(Path(config["dashboard"]["data_path"]))
+        self._excel_exporter   = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
 
-        # Zona anterior por lado da mão — para detetar transições entre frames
         self._prev_zones: dict[str, str | None] = {}
 
-        one_hand   = OneHandStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
-        two_hands  = TwoHandsStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
+        one_hand  = OneHandStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
+        two_hands = TwoHandsStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
         self._state_machine = TaskStateMachine(one_hand, two_hands, config["tracking"]["two_hands_zones"])
 
     def execute(self, detection_queue, stop_event) -> None:
@@ -147,20 +120,24 @@ class _MonitorSession:
                 self._last_detection_per_zone[zone.name] = detection
 
     def _log_zone_transitions(self, classified_hands, now, debug_logger) -> None:
-        """Deteta entradas e saídas de zona comparando com o frame anterior."""
-        current = {
-            detection.hand_side.value: (zone.name if zone else None, detection)
-            for detection, zone in classified_hands
-        }
+        # Constrói o mapa de zona atual por lado da mão
+        current = {}
+        for detection, zone in classified_hands:
+            zone_name = None
+            if zone is not None:
+                zone_name = zone.name
+            current[detection.hand_side.value] = (zone_name, detection)
+
         relative = now - self._session_start
 
+        # A união dos dois conjuntos de chaves apanha entradas E saídas:
+        # chaves só em prev → mão saiu; chaves só em current → mão entrou.
         for key in set(self._prev_zones) | set(current):
             self._check_zone_transition(key, current, now, relative, debug_logger)
 
         self._prev_zones = {k: v[0] for k, v in current.items()}
 
     def _check_zone_transition(self, key, current, now, relative, debug_logger) -> None:
-        """Verifica e regista transição de zona para uma mão específica."""
         prev_zone            = self._prev_zones.get(key)
         curr_zone, detection = current.get(key, (None, None))
 
@@ -176,10 +153,7 @@ class _MonitorSession:
             debug_logger.log_zone_enter(now, relative, curr_zone, detection, self._frame_idx)
 
     def _handle_task_event(self, task_event, debug_logger) -> None:
-        if task_event.was_forced:
-            debug_logger.log_task_timeout(task_event)
-        else:
-            debug_logger.log_task_complete(task_event)
+        self._log_task(task_event, debug_logger)
 
         cycle_result = self._cycle_tracker.record(task_event)
         self._metrics.record(task_event)
@@ -189,6 +163,12 @@ class _MonitorSession:
             self._metrics.record_cycle(cycle_result)
             self._excel_exporter.add_cycle_result(cycle_result)
             debug_logger.log_cycle_complete(cycle_result)
+
+    def _log_task(self, task_event, debug_logger) -> None:
+        if task_event.was_forced:
+            debug_logger.log_task_timeout(task_event)
+            return
+        debug_logger.log_task_complete(task_event)
 
     def _maybe_refresh_dashboard(self, now) -> None:
         from datetime import datetime
@@ -200,5 +180,3 @@ class _MonitorSession:
         snapshot = self._metrics.snapshot()
         self._dashboard_writer.write(snapshot)
         self._excel_exporter.write(snapshot)
-
-

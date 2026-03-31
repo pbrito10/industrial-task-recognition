@@ -1,24 +1,13 @@
 from __future__ import annotations
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Ferramenta interativa para definir ROIs.
+# Ferramenta interativa para desenhar ROIs sobre o feed da câmara.
 #
-# O que faz : abre a câmara, mostra o feed ao vivo e permite ao utilizador
-#             desenhar zonas de trabalho com o rato
-# Usado em  : Definir ROIs (corre no processo principal, não num processo separado)
+# Controlos: 1-9 selecionar zona | Del apagar | s guardar | q sair
 #
-# Controlos:
-#   1-9   selecionar zona
-#   Del   apagar zona selecionada
-#   s     guardar e sair
-#   q     sair sem guardar
-#
-# Fluxo:
-#   RoiDrawer.draw(existing_rois)
-#     → abre câmara
-#     → loop: lê frame → desenha ROIs → trata input
-#     → devolve RoiCollection atualizada (ou None se saiu sem guardar)
-# ═══════════════════════════════════════════════════════════════════════════════
+# O estado da sessão está dividido em dois objetos:
+#   _rois     — os dados (zonas desenhadas)
+#   _session  — o estado de interação (zona selecionada, drag, avisos)
+# Esta separação facilita raciocinar sobre o que muda e quando.
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -33,15 +22,12 @@ from src.shared.point import Point
 from src.video import frame_annotator
 from src.video.camera import Camera
 
-# ── Constantes ───────────────────────────────────────────────────────────────
-
-_WINDOW_NAME = "Definir ROIs  |  1-7 zona  |  Del apagar  |  s guardar  |  q sair"
+_WINDOW_NAME    = "Definir ROIs  |  1-7 zona  |  Del apagar  |  s guardar  |  q sair"
 _MIN_ROI_PIXELS = 15
-_FONT = cv2.FONT_HERSHEY_SIMPLEX
+_FONT           = cv2.FONT_HERSHEY_SIMPLEX
 
 _DELETE_KEYS = {127, 255, 65535}
 
-# ── Sinal devolvido pelo teclado ─────────────────────────────────────────────
 
 class _Signal(Enum):
     CONTINUE = "continue"
@@ -49,50 +35,41 @@ class _Signal(Enum):
     QUIT     = "quit"
 
 
-# ── Estados de drag ──────────────────────────────────────────────────────────
-
 @dataclass(frozen=True)
 class _IdleState:
-    """Sem drag em curso. Pode ter um aviso pendente."""
+    """Sem drag em curso. Pode ter um aviso pendente (zona em falta, etc.)."""
     warning: str | None = None
 
 
 @dataclass(frozen=True)
 class _DrawingState:
-    """Drag a criar nova ROI a partir de `start`."""
+    """Drag ativo — o utilizador está a desenhar um retângulo a partir de `start`."""
     start: Point
 
 
 _DragState = _IdleState | _DrawingState
 
 
-# ── Contentor de estado da sessão ────────────────────────────────────────────
-
 @dataclass
 class _ZoneSelection:
-    """Zona atualmente selecionada pelo utilizador (tecla 1-9)."""
     names: list[str]
     index: int | None = None
 
 
 @dataclass
 class _MouseState:
-    """Posição atual do rato e operação de drag em curso."""
     position: Point | None = None
     drag: _DragState = field(default_factory=_IdleState)
 
 
 @dataclass
 class _SessionState:
-    """Estado completo da sessão: zona selecionada + mouse."""
     selection: _ZoneSelection
     mouse: _MouseState = field(default_factory=_MouseState)
 
 
-# ── Funções de geometria (puras) ─────────────────────────────────────────────
-
 def _compute_drawing_roi(name: str, start: Point, end: Point) -> RegionOfInterest:
-    """Cria ROI normalizada a partir dos dois pontos do drag."""
+    """Normaliza os dois pontos do drag para top-left/bottom-right corretos."""
     return RegionOfInterest(
         name=name,
         top_left=Point(x=min(start.x, end.x), y=min(start.y, end.y)),
@@ -107,10 +84,8 @@ def _has_minimum_size(roi: RegionOfInterest) -> bool:
     )
 
 
-# ── Funções de rendering (puras) ─────────────────────────────────────────────
-
 def _draw_preview(frame: np.ndarray, session: _SessionState) -> None:
-    """Desenha o retângulo de preview enquanto o drag está em curso."""
+    """Retângulo a tracejado enquanto o drag está em curso."""
     current = session.mouse.position
     drag    = session.mouse.drag
 
@@ -130,38 +105,31 @@ def _draw_preview(frame: np.ndarray, session: _SessionState) -> None:
 
 
 def _draw_ui_overlay(frame: np.ndarray, session: _SessionState) -> None:
-    """Mostra zona selecionada e avisos no topo do frame."""
     if session.selection.index is not None:
         zone  = session.selection.names[session.selection.index]
         color = frame_annotator.zone_color(zone)
         cv2.putText(frame, f"Zona: {zone}", (10, 30), _FONT, 0.8, color, 2)
 
-    warning = session.mouse.drag.warning if isinstance(session.mouse.drag, _IdleState) else None
+    warning = None
+    if isinstance(session.mouse.drag, _IdleState):
+        warning = session.mouse.drag.warning
     if warning:
         h = frame.shape[0]
         cv2.putText(frame, warning, (10, h - 15), _FONT, 0.6, (0, 0, 255), 2)
 
 
 def _render(frame: np.ndarray, rois: RoiCollection, session: _SessionState) -> None:
-    """Compõe o frame: ROIs guardadas, preview do drag e indicadores visuais."""
-    selected_name = (
-        session.selection.names[session.selection.index]
-        if session.selection.index is not None
-        else None
-    )
+    selected_name = None
+    if session.selection.index is not None:
+        selected_name = session.selection.names[session.selection.index]
 
     frame_annotator.draw_rois(frame, rois, selected_name=selected_name)
     _draw_preview(frame, session)
     _draw_ui_overlay(frame, session)
 
 
-# ── DrawingSession ────────────────────────────────────────────────────────────
-
 class _DrawingSession:
-    """Gere o estado da sessão interativa (SRP).
-
-    Só duas variáveis: _rois (dados) e _session (estado de interação).
-    """
+    """Gere estado e interação da sessão de desenho."""
 
     def __init__(self, zone_names: list[str], rois: RoiCollection) -> None:
         self._rois    = rois
@@ -178,7 +146,6 @@ class _DrawingSession:
         point = Point(x=x, y=y)
         self._session.mouse.position = point
 
-        # Despacho direto — sem magic strings nem getattr
         handlers = {
             cv2.EVENT_LBUTTONDOWN: self._on_mouse_down,
             cv2.EVENT_LBUTTONUP:   self._on_mouse_up,
@@ -257,15 +224,11 @@ class _DrawingSession:
         self._session.mouse.drag = _IdleState()
 
 
-# ── RoiDrawer ────────────────────────────────────────────────────────────────
-
 class RoiDrawer:
-    """Ferramenta interativa para definir ROIs.
+    """Abre a câmara e permite definir ROIs interativamente.
 
-    Abre a câmara, mostra o feed ao vivo e permite desenhar zonas com o rato.
-    Devolve a RoiCollection atualizada ao guardar, ou None se o utilizador sair.
-
-    Não é um processo — corre no processo principal durante a opção "Definir ROIs".
+    Devolve a RoiCollection atualizada ao guardar, ou None se o utilizador
+    sair sem guardar (ROIs anteriores são mantidas pelo chamador).
     """
 
     def __init__(
@@ -277,7 +240,6 @@ class RoiDrawer:
         self._zone_names     = zone_names
 
     def draw(self, initial_rois: RoiCollection) -> RoiCollection | None:
-        """Abre a sessão interativa. Devolve None se o utilizador sair sem guardar."""
         camera  = self._camera_factory()
         session = _DrawingSession(self._zone_names, initial_rois)
 

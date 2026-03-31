@@ -1,20 +1,11 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# PROCESSO: Câmara
+# Câmara → frame_queue (RGB, espelho horizontal)
 #
-# O que faz : captura frames da câmara e envia-os para o detector
-# Recebe    : nada (é o primeiro bloco da pipeline)
-# Envia     : frame  →  frame_queue
-#             (numpy array em formato RGB, pronto para o MediaPipe)
+# OpenCV captura em BGR; convertemos para RGB aqui, uma vez, para não forçar
+# o detector a fazer esse trabalho em cada frame.
 #
-# Porquê RGB?
-#   O OpenCV captura sempre em BGR. O MediaPipe espera RGB.
-#   Converter aqui, uma vez, mantém o detector limpo.
-#
-# Porquê descartar frames quando a queue está cheia?
-#   Se o detector for mais lento que a câmara, a queue encheria com
-#   frames antigos. O utilizador veria o que aconteceu há segundos.
-#   Ao descartar, o detector processa sempre o frame mais recente.
-# ═══════════════════════════════════════════════════════════════════════════════
+# Quando a queue está cheia, descartamos o frame mais antigo em vez de bloquear.
+# A alternativa (bloquear) acumularia frames velhos: o utilizador veria sempre
+# o passado em vez do presente. Latência baixa > completude do histórico.
 
 
 def run(frame_queue, stop_event, config):
@@ -38,9 +29,8 @@ def run(frame_queue, stop_event, config):
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_rgb = cv2.flip(frame_rgb,1)
+            frame_rgb = cv2.flip(frame_rgb, 1)
 
-            # Descarta o frame mais antigo se a queue estiver cheia
             if frame_queue.full():
                 try:
                     frame_queue.get_nowait()

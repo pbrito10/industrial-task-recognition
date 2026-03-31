@@ -1,196 +1,201 @@
 # Mapa do Projeto — Sistema de Reconhecimento Industrial
 
-## Para que serve cada ficheiro e onde ir para mudar o quê
+Sistema de visão computacional que deteta mãos numa bancada de montagem industrial,
+reconhece em que zona de trabalho estão, e regista automaticamente o tempo de cada
+tarefa, a ordem de execução e as métricas de produtividade — em tempo real e em Excel.
 
 ---
 
-## Ponto de entrada
+## Como usar
+
+```
+python main.py
+```
+
+| Opção | Para que serve |
+|-------|---------------|
+| 1 — Testar câmara | Abre a câmara e mostra o esqueleto das mãos. Usa para verificar se está tudo a funcionar antes de trabalhar. |
+| 2 — Definir ROIs | Desenha as zonas de trabalho com o rato sobre o feed da câmara. **Faz isto primeiro** — sem ROIs o programa não corre. |
+| 3 — Correr programa | Pipeline completo: deteta mãos, regista tarefas, abre o dashboard Streamlit e exporta Excel no fim. |
+
+---
+
+## Conceitos-chave
+
+Antes de ver os ficheiros, convém perceber o vocabulário do sistema:
+
+**ROI (Region of Interest)**
+Retângulo desenhado sobre a câmara que representa uma zona física da bancada
+(ex: "Porca", "Montagem"). O sistema deteta quando uma mão entra ou sai de cada ROI.
+
+**Dwell time**
+Tempo mínimo que a mão tem de estar parada dentro de uma ROI para o sistema confirmar
+que está a trabalhar ali (e não só a passar). Configurável em `settings.yaml`.
+
+**Tarefa (TaskEvent)**
+Período desde que a mão confirmou entrada numa ROI (após dwell) até sair dela.
+Cada tarefa tem zona, duração, número de ciclo e se foi fechada por timeout.
+
+**Ciclo (CycleResult)**
+Sequência completa de tarefas desde a primeira zona até à zona de saída ("Saida").
+O sistema verifica se as zonas foram visitadas na ordem esperada.
+
+**Gargalo**
+A zona com maior tempo médio de tarefa — a que mais atrasa o ciclo.
+
+**was_forced**
+Se `True`, a tarefa foi encerrada pelo timeout (30 s) e não pela saída da mão.
+Estas tarefas contam como "interrupções" e não entram nas métricas de produtividade.
+
+---
+
+## Fluxo de dados
+
+```
+Câmara (BGR)
+  └─ capture_process      — converte para RGB, descarta frames antigos
+       └─ frame_queue
+            └─ detection_process   — MediaPipe deteta mãos → lista de HandDetection
+                 └─ detection_queue
+                      ├─ display_process      [Testar Câmara]
+                      │    └─ janela OpenCV com esqueleto + FPS
+                      │
+                      └─ monitor_process      [Correr Programa]
+                           ├─ ZoneClassifier       → (mão, zona | None) por frame
+                           ├─ TaskStateMachine     → TaskEvent quando tarefa termina
+                           ├─ CycleTracker         → CycleResult quando ciclo fecha
+                           ├─ MetricsCalculator    → MetricsSnapshot atualizado
+                           ├─ DebugLogger          → output/debug_*.csv  (tempo real)
+                           ├─ DashboardWriter      → dashboard/data/metrics.json
+                           │                               ↓
+                           │                         Streamlit (dashboard/app.py)
+                           └─ ExcelExporter        → output/sessao_*.xlsx  (no fim)
+```
+
+---
+
+## Configuração rápida
+
+Tudo o que se pode ajustar sem tocar no código está em **`config/settings.yaml`**:
+
+| Parâmetro | O que controla |
+|-----------|---------------|
+| `camera.index` | Índice da câmara USB (0 = primeira) |
+| `tracking.dwell_time_seconds` | Tempo mínimo parado na zona para confirmar tarefa |
+| `tracking.task_timeout_seconds` | Tempo máximo numa tarefa antes de forçar fecho |
+| `tracking.stillness_threshold_px` | Velocidade máxima do pulso para "mão parada" (px/frame) |
+| `tracking.two_hands_zones` | Zonas que exigem as duas mãos em simultâneo (ex: `["Montagem"]`) |
+| `tracking.cycle_zone_order` | Ordem esperada das zonas num ciclo completo |
+| `tracking.exit_zone` | Zona cujo fecho encerra o ciclo (ex: `"Saida"`) |
+| `dashboard.refresh_seconds` | Intervalo de atualização do dashboard |
+
+As ROIs (coordenadas dos retângulos) ficam em **`config/rois.json`** — gerado pela opção 2 do menu.
+
+---
+
+## Referência de ficheiros
+
+### Ponto de entrada
+
+| Ficheiro | O que faz | Alterar aqui |
+|----------|-----------|-------------|
+| `main.py` | Menu, monta e lança os processos certos para cada modo | Adicionar opções ao menu, mudar tamanhos das queues |
+
+### Processos da pipeline
+
+Cada ficheiro tem uma função `run()` que corre num processo separado via multiprocessing.
+
+| Ficheiro | Modo | Papel |
+|----------|------|-------|
+| `capture_process.py` | Ambos | Lê frames da câmara, converte BGR→RGB, envia para `frame_queue` |
+| `detection_process.py` | Ambos | Corre o MediaPipe, envia `(frame, mãos)` para `detection_queue` |
+| `display_process.py` | Testar câmara | Mostra a janela com keypoints e FPS |
+| `monitor_process.py` | Correr programa | Orquestra todo o pipeline: zones → state machine → métricas → outputs |
+
+### Dashboard
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `main.py` | Menu principal, monta os processos e lança os modos. **Alterar aqui**: menu, nomes de opções, ordem de lançamento dos processos, caminho de config/ROIs |
+| `dashboard/app.py` | App Streamlit — lê `metrics.json` e apresenta as métricas em tempo real |
+| `dashboard/data/metrics.json` | Gerado pelo `DashboardWriter` durante a sessão; não editar manualmente |
 
----
-
-## Processos da pipeline
-
-Cada ficheiro tem uma função `run()` que corre num processo separado.
-
-| Ficheiro | Modo | Papel na pipeline |
-|----------|------|-------------------|
-| `capture_process.py` | Testar câmara / Correr programa | Lê frames da câmara, converte para RGB, envia para `frame_queue` |
-| `detection_process.py` | Testar câmara / Correr programa | Lê frames do `frame_queue`, corre o detector MediaPipe, envia `(frame, mãos)` para `detection_queue` |
-| `display_process.py` | **Testar câmara** | Recebe `(frame, mãos)` e mostra a janela com keypoints e FPS |
-| `monitor_process.py` | **Correr programa** | Recebe `(frame, mãos)`, classifica zonas, atualiza a state machine, calcula métricas, mostra janela; exporta Excel e dashboard no fim |
-
-**Alterar aqui:**
-- Resolução / índice da câmara → `config/settings.yaml` (secção `camera`)
-- Tamanho das queues → `main.py` (`Queue(maxsize=...)`)
-- Lógica de visualização ao vivo → `display_process.py` ou `monitor_process.py`
-
----
-
-## Dashboard (Streamlit)
+### Deteção de mãos (`src/detection/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `dashboard/app.py` | App Streamlit. Lê `dashboard/data/metrics.json` e apresenta métricas em tempo real |
-| `dashboard/data/metrics.json` | Gerado pelo `DashboardWriter` durante a sessão. Não editar manualmente |
-| `.streamlit/config.toml` | Configuração do Streamlit (headless, usage stats) |
+| `detector_interface.py` | Interface abstrata — permite trocar o detector sem mudar o resto |
+| `mediapipe_detector.py` | Implementação com MediaPipe; converte landmarks normalizados para píxeis |
+| `hand_detection.py` | Value object de uma mão detetada: keypoints, bounding box, confiança, lado |
+| `keypoint_collection.py` | Os 21 landmarks da mão; expõe `finger_mcp_centroid()` para classificação de zona |
+| `keypoint.py` | Um landmark individual: índice + Point + confiança |
+| `bounding_box.py` | Retângulo calculado a partir dos extremos dos landmarks |
 
-**Alterar aqui:**
-- Layout ou secções do dashboard → `dashboard/app.py`
-- Intervalo de atualização → `config/settings.yaml` (secção `dashboard.refresh_seconds`)
+> Trocar o detector: implementa `DetectorInterface` numa nova classe e atualiza `detection_process.py`.
 
----
-
-## Configuração
-
-| Ficheiro | O que faz |
-|----------|-----------|
-| `config/settings.yaml` | Todas as configurações da aplicação (câmara, tracking, dashboard, output) |
-| `config/rois.json` | Zonas desenhadas pelo utilizador (gerado pela opção "Definir ROIs") |
-
-**Alterar aqui:**
-- Tempo de dwell → `tracking.dwell_time_seconds`
-- Timeout de tarefa → `tracking.task_timeout_seconds`
-- Ordem esperada de ciclo → `tracking.cycle_zone_order`
-- Zona de saída do ciclo → `tracking.exit_zone`
-- Zonas que exigem duas mãos → `tracking.two_hands_zones`
-- Pasta de exportação Excel → `output.excel_output_dir`
-
----
-
-## Deteção de mãos (`src/detection/`)
+### Zonas de trabalho (`src/roi/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `detector_interface.py` | Interface abstrata `DetectorInterface` (OCP) |
-| `mediapipe_detector.py` | Implementação com MediaPipe Hands — devolve lista de `HandDetection` |
-| `hand_detection.py` | Value object com `hand_side`, `keypoints`, `bounding_box`, `confidence` |
-| `keypoint_collection.py` | First-class collection dos 21 landmarks MediaPipe |
-| `keypoint.py` | Um landmark: índice + `Point` |
-| `bounding_box.py` | Retângulo com `top_left`, `bottom_right` e lógica de centróide |
+| `region_of_interest.py` | Uma zona: nome + dois pontos + método `contains()` |
+| `roi_collection.py` | Coleção de zonas com lookup O(1) por nome |
+| `roi_repository.py` | Interface de persistência |
+| `json_roi_repository.py` | Lê e escreve `rois.json` |
+| `roi_drawer.py` | Sessão interativa de desenho de ROIs com o rato |
 
-**Alterar aqui:**
-- Trocar o modelo de deteção → implementar nova classe que respeite `DetectorInterface` e atualizar `detection_process.py`
-- Ajustar confiança mínima de deteção → `mediapipe_detector.py`
-
----
-
-## Zonas de trabalho (`src/roi/`)
+### Tracking e estado (`src/tracking/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `region_of_interest.py` | Value object de uma zona: nome, `top_left`, `bottom_right`, método `contains()` |
-| `roi_collection.py` | First-class collection das zonas (lookup O(1) por nome) |
-| `roi_repository.py` | Interface abstrata de persistência |
-| `json_roi_repository.py` | Lê/escreve `rois.json` |
-| `roi_drawer.py` | Sessão interativa de desenho de ROIs com rato sobre a câmara |
-
-**Alterar aqui:**
-- Formato de persistência das ROIs → `json_roi_repository.py`
-- Interface de desenho (controlos, visualização) → `roi_drawer.py`
-- Lógica de "ponto está dentro da zona" → `region_of_interest.py` (`contains()`)
-
----
-
-## Tracking e estado da tarefa (`src/tracking/`)
-
-| Ficheiro | O que faz |
-|----------|-----------|
-| `zone_classifier.py` | Recebe lista de `HandDetection`, devolve `(detection, zona | None)` para cada mão |
-| `task_state_machine.py` | Três classes: `OneHandStateMachine`, `TwoHandsStateMachine`, `TaskStateMachine` (orquestrador). Gerem o ciclo IDLE → DWELLING → TASK_IN_PROGRESS → IDLE |
-| `activation_strategy.py` | Estratégias de ativação: `TimeDwellStrategy` (tempo fixo) e `StillnessDwellStrategy` (mão parada) |
+| `zone_classifier.py` | Frame a frame: diz em que zona está cada mão (ou None se em trânsito) |
+| `activation_strategy.py` | Define quando o dwell timer avança: `StillnessDwellStrategy` (mão parada) ou `TimeDwellStrategy` (sempre) |
+| `task_state_machine.py` | `OneHandStateMachine` e `TwoHandsStateMachine`; o `TaskStateMachine` orquestra qual usar conforme a zona |
 | `task_event.py` | Value object de uma tarefa concluída: zona, start/end, duração, ciclo, `was_forced` |
-| `cycle_tracker.py` | Regista a sequência de zonas por ciclo; verifica ordem; emite `CycleResult` ao detetar a zona de saída |
+| `cycle_tracker.py` | Acumula tarefas por ciclo; fecha o ciclo quando deteta a `exit_zone`; valida a ordem |
 | `cycle_result.py` | Value object de um ciclo completo: duração, número, `order_ok`, sequência real |
 
-**Alterar aqui:**
-- Algoritmo de ativação (ex: mudar de "stillness" para "tempo fixo") → `activation_strategy.py` e `config/settings.yaml`
-- Lógica de transição de estados → `task_state_machine.py`
-- Como se define o fim de um ciclo → `cycle_tracker.py` (`exit_zone` em settings)
-- O que é "ordem correta" → `cycle_tracker.py` (`_matches_order()`) e `tracking.cycle_zone_order` em settings
+> Mudar o critério de confirmação (ex: tempo fixo em vez de "mão parada"): `activation_strategy.py` + `settings.yaml`.
+> Mudar o que é "ordem correta": `cycle_tracker.py` (`_matches_order()`) + `tracking.cycle_zone_order` em settings.
 
----
-
-## Métricas (`src/metrics/`)
+### Métricas (`src/metrics/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `task_metrics.py` | Estatísticas de duração por zona (min/avg/max/std) |
+| `task_metrics.py` | Min/avg/max/desvio padrão das durações de uma zona |
 | `cycle_metrics.py` | Estatísticas de ciclos + contagem de ordem correta/incorreta |
-| `metrics_calculator.py` | Agrega `TaskEvent`s e `CycleResult`s; separa produtivo/interrupção/transição; calcula gargalo |
+| `metrics_calculator.py` | Recebe TaskEvents e CycleResults; separa produtivo/interrupção/transição; identifica o gargalo |
 
-**Alterar aqui:**
-- Definição de "zona gargalo" → `metrics_calculator.py` (`_bottleneck_zone()`)
-- Fórmula de tempo de transição → `metrics_calculator.py` (`_transition_time()`)
-
----
-
-## Saída de dados (`src/output/`)
+### Saída de dados (`src/output/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `output_interface.py` | Interface abstrata `OutputInterface` com método `write(snapshot)` |
+| `output_interface.py` | Interface `write(snapshot)` — permite adicionar novos outputs sem mudar o pipeline |
 | `metrics_snapshot.py` | Dataclass imutável com o estado completo das métricas num instante |
-| `dashboard_writer.py` | Serializa o snapshot para `dashboard/data/metrics.json` (escrita atómica) |
+| `dashboard_writer.py` | Serializa o snapshot para JSON com escrita atómica (evita race condition com o Streamlit) |
 | `excel_exporter.py` | Exporta Excel com 4 folhas: Resumo, Métricas por Zona, Ciclos, Eventos |
 
-**Alterar aqui:**
-- Adicionar colunas ao Excel → `excel_exporter.py`
-- Mudar o formato do JSON do dashboard → `dashboard_writer.py` (`_serialize()`)
-- Adicionar nova forma de exportação → implementar `OutputInterface` e registar em `monitor_process.py`
+> Adicionar uma nova forma de exportação (ex: base de dados): implementa `OutputInterface` e regista em `monitor_process.py`.
 
----
-
-## Logging de debug (`src/events/`)
+### Logging de debug (`src/events/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `debug_logger.py` | Context manager que escreve CSV com eventos ZONE_ENTER, ZONE_EXIT, TASK_COMPLETE, TASK_TIMEOUT, CYCLE_COMPLETE |
-| `event_logger.py` | Versão anterior (mantida por compatibilidade — não está em uso ativo) |
-| `zone_event.py` | Value object de um evento de zona (entrada/saída) |
+| `debug_logger.py` | CSV em tempo real com todos os eventos: ZONE_ENTER, ZONE_EXIT, TASK_COMPLETE, TASK_TIMEOUT, CYCLE_COMPLETE |
+| `zone_event.py` | Value object de um evento de entrada/saída de zona |
+| `event_logger.py` | Versão anterior — não está em uso ativo |
 
-**Alterar aqui:**
-- Colunas do CSV de debug → `debug_logger.py`
-- Pasta de saída dos CSVs → `config/settings.yaml` (`output.excel_output_dir`) — o CSV vai para a mesma pasta
-
----
-
-## Partilhados (`src/shared/`)
+### Partilhados (`src/shared/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
-| `point.py` | Value object `Point(x, y)` em píxeis |
-| `confidence.py` | Value object para a confiança da deteção (0–1); `as_percentage()` |
-| `hand_side.py` | Enum `HandSide.LEFT / RIGHT` |
-| `task_state.py` | Enum dos estados da máquina: IDLE, DWELLING, WAITING_SECOND_HAND, DWELLING_TWO_HANDS, TASK_IN_PROGRESS |
-| `event_type.py` | Enum dos tipos de evento para o CSV de debug |
+| `point.py` | `Point(x, y)` em píxeis com `distance_to()` |
+| `confidence.py` | Confiança da deteção (0–1) com validação |
+| `hand_side.py` | `HandSide.LEFT / RIGHT` |
+| `task_state.py` | Estados da máquina: IDLE → DWELLING → TASK_IN_PROGRESS (e variantes two-hands) |
+| `event_type.py` | `EventType.ENTER / EXIT` — usado no CSV de debug |
 
----
-
-## Vídeo (`src/video/`)
+### Vídeo (`src/video/`)
 
 | Ficheiro | O que faz |
 |----------|-----------|
 | `camera.py` | Abre e lê frames da câmara via OpenCV |
-| `frame_annotator.py` | Funções de desenho sobre frames: esqueleto, keypoints, bounding boxes, ROIs, FPS |
-
----
-
-## Fluxo de dados resumido
-
-```
-câmara (BGR)
-  └─ capture_process  → frame_queue (RGB)
-       └─ detection_process  → detection_queue (frame RGB, [HandDetection])
-            ├─ display_process   [Testar Câmara]
-            └─ monitor_process   [Correr Programa]
-                 ├─ ZoneClassifier → (detection, ROI | None)
-                 ├─ TaskStateMachine → TaskEvent
-                 ├─ CycleTracker → CycleResult
-                 ├─ MetricsCalculator → MetricsSnapshot
-                 ├─ DashboardWriter → dashboard/data/metrics.json → Streamlit
-                 └─ ExcelExporter → output/*.xlsx
-```
+| `frame_annotator.py` | Desenha esqueleto, keypoints, bounding boxes, ROIs e FPS sobre frames |

@@ -54,7 +54,7 @@ class EventLogger:
             "y_px":            event.position.y,
             "confidence":      round(event.confidence.value, 4),
             "frame_idx":       event.frame_idx,
-            "was_forced":      "true" if event.was_forced else "false",
+            "was_forced":      str(event.was_forced).lower(),
         })
         self._file.flush()
 

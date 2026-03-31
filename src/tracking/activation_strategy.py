@@ -6,13 +6,11 @@ from src.detection.hand_detection import HandDetection
 
 
 class ActivationStrategy(ABC):
-    """Decide se o dwell timer deve avançar num dado frame.
+    """Define quando o dwell timer avança.
 
-    Recebe a deteção atual e a anterior (ou None se for o primeiro frame
-    na zona) — sem estado interno, o que facilita reutilização entre mãos.
-
-    Trocar a estratégia muda o critério de confirmação sem tocar na
-    state machine (OCP + Strategy pattern).
+    Stateless por design — pode ser partilhada entre várias mãos/máquinas
+    sem risco de estado cruzado. O contexto necessário (frame atual e anterior)
+    é passado em cada chamada.
     """
 
     @abstractmethod
@@ -21,14 +19,13 @@ class ActivationStrategy(ABC):
         detection: HandDetection,
         previous: HandDetection | None,
     ) -> bool:
-        """True se a condição de ativação está cumprida neste frame."""
+        """True se o critério de ativação está cumprido neste frame."""
 
 
 class TimeDwellStrategy(ActivationStrategy):
-    """Estratégia de fallback: o timer avança sempre que a mão está na zona.
+    """Timer avança sempre que a mão está na zona, sem verificar movimento.
 
-    Equivale ao dwell time clássico sem qualquer filtro de movimento.
-    Útil para comparação ou zonas onde o movimento não é relevante.
+    Útil para depuração ou zonas onde qualquer presença conta.
     """
 
     def is_active(self, detection: HandDetection, previous: HandDetection | None) -> bool:
@@ -36,13 +33,14 @@ class TimeDwellStrategy(ActivationStrategy):
 
 
 class StillnessDwellStrategy(ActivationStrategy):
-    """O timer só avança quando a mão está suficientemente parada.
+    """Timer só avança quando a mão está suficientemente parada.
 
-    Resolve a ambiguidade entre uma passagem lenta e uma tarefa rápida:
-    uma passagem nunca para completamente, uma tarefa sim.
+    Distingue uma passagem lenta (mão nunca para) de uma tarefa rápida
+    (mão para brevemente). Sem este filtro, qualquer trânsito lento pela
+    zona seria registado como tarefa.
 
-    O threshold é em píxeis por frame — valores típicos entre 3 e 8 px,
-    dependendo da resolução e da distância da câmara à bancada.
+    O threshold em px/frame depende da resolução e da distância câmara-bancada.
+    A 640x480, valores entre 3 e 8 px/frame funcionam bem na prática.
     """
 
     def __init__(self, velocity_threshold_px: float) -> None:
@@ -50,11 +48,8 @@ class StillnessDwellStrategy(ActivationStrategy):
 
     def is_active(self, detection: HandDetection, previous: HandDetection | None) -> bool:
         if previous is None:
-            # Primeiro frame na zona — sem dado anterior para calcular velocidade
+            # Primeiro frame nesta zona — sem referência anterior para calcular velocidade
             return False
 
-        current_wrist  = detection.wrist().position
-        previous_wrist = previous.wrist().position
-        velocity       = current_wrist.distance_to(previous_wrist)
-
+        velocity = detection.wrist().position.distance_to(previous.wrist().position)
         return velocity < self._threshold

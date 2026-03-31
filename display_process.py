@@ -1,17 +1,7 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# PROCESSO: Visualização (modo "Testar Câmara")
+# detection_queue → janela OpenCV com esqueleto das mãos e FPS
 #
-# O que faz : mostra o feed ao vivo com keypoints e bounding boxes das mãos
-# Recebe    : (frame, mãos)  ←  detection_queue
-# Envia     : nada (é o último bloco neste modo)
-#
-# Usado em  : Testar Câmara
-#             camera → detector → [display]
-#
-# Porquê converter RGB→BGR antes de mostrar?
-#   O frame chegou em RGB (convertido na câmara para o MediaPipe).
-#   O OpenCV (imshow) espera BGR — sem esta conversão as cores ficam invertidas.
-# ═══════════════════════════════════════════════════════════════════════════════
+# Usado apenas no modo "Testar Câmara" — não há state machine nem métricas.
+# O frame chega em RGB (convertido na câmara); o imshow espera BGR.
 
 
 def run(detection_queue, stop_event):
@@ -37,8 +27,11 @@ def run(detection_queue, stop_event):
 
             frame_annotator.draw_detections(frame_bgr, maos)
 
-            now = time.perf_counter()
-            fps = 1.0 / (now - prev_time) if now != prev_time else 0.0
+            now     = time.perf_counter()
+            elapsed = now - prev_time
+            fps     = 0.0
+            if elapsed > 0:
+                fps = 1.0 / elapsed
             prev_time = now
 
             frame_annotator.draw_fps(frame_bgr, fps)

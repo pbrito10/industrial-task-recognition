@@ -1,33 +1,15 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# Ponto de entrada da aplicação.
+# Ponto de entrada: menu + orquestração dos processos.
 #
-# Este ficheiro tem duas responsabilidades:
-#   1. Mostrar o menu e reagir à escolha do utilizador
-#   2. Montar os blocos (processos) certos para cada modo
+# Cada modo é uma composição de processos que comunicam via Queues:
 #
-# ── Arquitetura de blocos ────────────────────────────────────────────────────
+#   Testar câmara:   capture → detector → display
+#   Definir ROIs:    corre no processo principal (sessão interativa)
+#   Correr programa: capture → detector → monitor  (+Streamlit como subprocess)
 #
-#   Cada bloco é um ficheiro independente com uma função run().
-#   Os blocos comunicam entre si através de Queues.
-#   O stop_event é uma flag partilhada — qualquer bloco pode ativá-la
-#   para sinalizar que todos devem parar.
-#
-#   MODO "Testar Câmara":
-#     capture_process.py → frame_queue → detection_process.py → detection_queue → display_process.py
-#
-#   MODO "Definir ROIs":
-#     Corre no processo principal (não usa processos separados).
-#     O RoiDrawer abre a câmara diretamente e gere a sessão interativa.
-#
-#   MODO "Correr Programa":
-#     capture_process.py → frame_queue → detection_process.py → detection_queue → monitor_process.py
-#
-# ── O que flui entre blocos ──────────────────────────────────────────────────
-#
-#   frame_queue     : frame individual em RGB  (numpy array)
-#   detection_queue : (frame RGB, lista de HandDetection)
-#
-# ═══════════════════════════════════════════════════════════════════════════════
+# Os imports dos módulos de processo ficam dentro das funções run_*
+# porque cada processo filho arranca limpo (spawn) e deve importar
+# apenas o que precisa — herdar estado do pai causaria problemas com
+# OpenCV e X11, especialmente ao usar "Testar Câmara" após "Definir ROIs".
 
 import subprocess
 import sys
@@ -39,12 +21,6 @@ import yaml
 
 _CONFIG_PATH = Path(__file__).parent / "config" / "settings.yaml"
 _ROI_PATH    = Path(__file__).parent / "config" / "rois.json"
-
-
-# ── Wrappers dos processos ────────────────────────────────────────────────────
-# Cada função importa o seu módulo e chama run().
-# Os imports ficam aqui dentro porque cada processo filho começa do zero
-# e deve importar só o que precisa.
 
 
 def run_camera(frame_queue, stop_event, config):
@@ -67,12 +43,7 @@ def run_pipeline(detection_queue, stop_event, config, roi_path):
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
-
-
-# ── Funções auxiliares de lançamento ─────────────────────────────────────────
-
 def _start_processes(processos: dict) -> None:
-    """Arranca cada processo com um breve intervalo e mostra o PID."""
     print("A arrancar processos...")
     for nome, processo in processos.items():
         processo.start()
@@ -82,7 +53,6 @@ def _start_processes(processos: dict) -> None:
 
 
 def _wait_for_stop(stop_event) -> None:
-    """Bloqueia até Ctrl+C ou até o stop_event ser ativado por outro processo."""
     try:
         while not stop_event.is_set():
             time.sleep(0.1)
@@ -92,7 +62,6 @@ def _wait_for_stop(stop_event) -> None:
 
 
 def _terminate_processes(processos: dict) -> None:
-    """Aguarda que cada processo termine; força terminação se necessário."""
     for processo in processos.values():
         processo.join(timeout=3)
         if processo.is_alive():
@@ -101,21 +70,14 @@ def _terminate_processes(processos: dict) -> None:
 
 
 def _launch(stop_event, **processos):
-    """Orquestra o ciclo de vida dos processos: arrancar → aguardar → terminar."""
+    """Arranca os processos, aguarda o sinal de paragem e termina-os."""
     _start_processes(processos)
     _wait_for_stop(stop_event)
     _terminate_processes(processos)
 
 
-# ── Modos de funcionamento ────────────────────────────────────────────────────
-
 def testar_camera(config):
-    """
-    Abre a câmara e mostra o feed com keypoints das mãos.
-    Útil para verificar se a câmara e o MediaPipe estão a funcionar.
-
-    Blocos: capture → detector → display
-    """
+    """Abre a câmara e mostra o feed com keypoints. Não grava nada."""
     frame_queue     = Queue(maxsize=2)
     detection_queue = Queue(maxsize=5)
     stop_event      = Event()
@@ -132,10 +94,10 @@ def testar_camera(config):
 
 
 def definir_rois(config):
-    """
-    Abre a câmara e permite desenhar as zonas de trabalho (ROIs) com o rato.
-    Corre no processo principal — não precisa de processos separados porque
-    é uma sessão interativa com início e fim definidos.
+    """Sessão interativa de desenho de ROIs sobre o feed da câmara.
+
+    Corre no processo principal — não precisa de multiprocessing porque
+    tem início e fim definidos e não partilha dados com outros processos.
 
     Controlos: 1-9 selecionar zona | Del apagar | s guardar | q sair
     """
@@ -166,12 +128,11 @@ def definir_rois(config):
 
 
 def correr_programa(config):
-    """
-    Corre o pipeline completo de análise com tracking, métricas e dashboard.
+    """Pipeline completo com tracking, métricas, dashboard e exportação Excel.
 
-    Blocos: capture → detector → monitor
-    O dashboard Streamlit arranca como processo externo (subprocess) — não é um
-    estágio do pipeline e não usa queues nem stop_event.
+    O Streamlit é lançado como subprocess independente — não usa queues nem
+    stop_event. Lê o JSON escrito pelo DashboardWriter a cada refresh_seconds.
+    É terminado no finally para não ficar órfão se o pipeline fechar com erro.
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
@@ -205,8 +166,6 @@ def correr_programa(config):
         dashboard_proc.terminate()
 
 
-# ── Menu ──────────────────────────────────────────────────────────────────────
-
 _OPCOES = {
     "1": ("Testar câmara",   testar_camera),
     "2": ("Definir ROIs",    definir_rois),
@@ -238,11 +197,9 @@ def main():
         funcao(config)
 
 
-# Guarda obrigatória para multiprocessing.
-# Sem isto, cada processo filho tentaria re-executar o main() ao arrancar,
-# criando um ciclo infinito de processos.
 if __name__ == "__main__":
-    # spawn: cada processo filho arranca limpo, sem herdar estado OpenCV/X11 do pai.
-    # Necessário para que "Testar Câmara" funcione após "Definir ROIs" na mesma sessão.
+    # spawn em vez de fork — necessário para que OpenCV e X11 não herdem
+    # estado do processo pai, o que causaria falhas ao usar múltiplos modos
+    # na mesma sessão (ex: Testar Câmara após Definir ROIs).
     set_start_method("spawn")
     main()

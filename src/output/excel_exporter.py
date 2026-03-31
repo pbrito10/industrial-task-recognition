@@ -15,6 +15,9 @@ from src.tracking.task_event import TaskEvent
 _BOTTLENECK_FILL = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
 _HEADER_FONT     = Font(bold=True)
 
+# Mapeamento direto para evitar ternário aninhado em _write_cycles
+_ORDER_LABEL: dict[bool | None, str] = {True: "Sim", False: "Não", None: "—"}
+
 
 class ExcelExporter(OutputInterface):
     """Exporta os dados da sessão para um ficheiro .xlsx no fim da sessão.
@@ -55,17 +58,23 @@ class ExcelExporter(OutputInterface):
     # ── Folhas ───────────────────────────────────────────────────────────────
 
     def _write_summary(self, writer: pd.ExcelWriter, snapshot: MetricsSnapshot) -> None:
-        cycle = snapshot.cycle_metrics
+        cycle   = snapshot.cycle_metrics
+        avg_s   = "—"
+        std_s   = "—"
+        if cycle.count():
+            avg_s = round(cycle.average().total_seconds(), 2)
+            std_s = round(cycle.std_deviation().total_seconds(), 2)
+
         rows = [
-            ("Data",                  self._session_start.strftime("%Y-%m-%d %H:%M")),
-            ("Duração total (s)",     round(snapshot.session_duration.total_seconds(), 1)),
-            ("Ciclos completos",      cycle.count()),
-            ("Tempo médio ciclo (s)", round(cycle.average().total_seconds(), 2) if cycle.count() else "—"),
-            ("Desvio padrão ciclo (s)", round(cycle.std_deviation().total_seconds(), 2) if cycle.count() else "—"),
-            ("% Tempo produtivo",     round(snapshot.productive_percentage, 1)),
-            ("% Tempo transição",     round(snapshot.transition_percentage, 1)),
-            ("% Tempo interrupção",   round(snapshot.interruption_percentage, 1)),
-            ("Zona gargalo",          snapshot.bottleneck_zone or "—"),
+            ("Data",                    self._session_start.strftime("%Y-%m-%d %H:%M")),
+            ("Duração total (s)",       round(snapshot.session_duration.total_seconds(), 1)),
+            ("Ciclos completos",        cycle.count()),
+            ("Tempo médio ciclo (s)",   avg_s),
+            ("Desvio padrão ciclo (s)", std_s),
+            ("% Tempo produtivo",       round(snapshot.productive_percentage, 1)),
+            ("% Tempo transição",       round(snapshot.transition_percentage, 1)),
+            ("% Tempo interrupção",     round(snapshot.interruption_percentage, 1)),
+            ("Zona gargalo",            snapshot.bottleneck_zone or "—"),
         ]
 
         df = pd.DataFrame(rows, columns=["Métrica", "Valor"])
@@ -100,12 +109,15 @@ class ExcelExporter(OutputInterface):
         rows = []
         for cycle_number, events in sorted(cycles.items()):
             order_ok = self._cycle_order.get(cycle_number, None)
+            start    = min(e.start_time for e in events)
+            end      = max(e.end_time   for e in events)
+            duration = round((end - start).total_seconds(), 2)
             rows.append({
-                "Nº Ciclo":       cycle_number,
-                "Início":         min(e.start_time for e in events).strftime("%H:%M:%S"),
-                "Fim":            max(e.end_time   for e in events).strftime("%H:%M:%S"),
-                "Duração (s)":    round((max(e.end_time for e in events) - min(e.start_time for e in events)).total_seconds(), 2),
-                "Ordem Correta":  "Sim" if order_ok else ("Não" if order_ok is False else "—"),
+                "Nº Ciclo":      cycle_number,
+                "Início":        start.strftime("%H:%M:%S"),
+                "Fim":           end.strftime("%H:%M:%S"),
+                "Duração (s)":   duration,
+                "Ordem Correta": _ORDER_LABEL.get(order_ok, "—"),
             })
 
         df = pd.DataFrame(rows)
@@ -120,7 +132,7 @@ class ExcelExporter(OutputInterface):
                 "Início":      event.start_time.strftime("%H:%M:%S.%f")[:-3],
                 "Fim":         event.end_time.strftime("%H:%M:%S.%f")[:-3],
                 "Duração (s)": round(event.duration.total_seconds(), 3),
-                "Forçado":     "Sim" if event.was_forced else "Não",
+                "Forçado":     _ORDER_LABEL[event.was_forced],
             }
             for event in self._events
         ]
