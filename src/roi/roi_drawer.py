@@ -289,6 +289,7 @@ class RoiDrawer:
         finally:
             camera.release()
             cv2.destroyAllWindows()
+            cv2.waitKey(1)  # flush de eventos X11 pendentes antes de sair
 
     def _run_loop(self, camera: Camera, session: _DrawingSession) -> RoiCollection | None:
         while True:

@@ -30,7 +30,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 import time
-from multiprocessing import Event, Process, Queue
+from multiprocessing import Event, Process, Queue, set_start_method
 from pathlib import Path
 
 import yaml
@@ -225,4 +225,7 @@ def main():
 # Sem isto, cada processo filho tentaria re-executar o main() ao arrancar,
 # criando um ciclo infinito de processos.
 if __name__ == "__main__":
+    # spawn: cada processo filho arranca limpo, sem herdar estado OpenCV/X11 do pai.
+    # Necessário para que "Testar Câmara" funcione após "Definir ROIs" na mesma sessão.
+    set_start_method("spawn")
     main()
