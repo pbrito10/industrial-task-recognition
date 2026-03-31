@@ -24,7 +24,11 @@ class ZoneClassifier:
         return [self._classify_one(detection) for detection in detections]
 
     def _classify_one(self, detection: HandDetection) -> ClassifiedHand:
-        """Localiza a mão usando o centro da bounding box."""
-        point = detection.bounding_box.center()
+        """Localiza a mão usando o centróide dos MCP dos 4 dedos.
+
+        Ver KeypointCollection.finger_mcp_centroid() para a justificação
+        da escolha deste ponto de referência.
+        """
+        point = detection.keypoints.finger_mcp_centroid()
         zone  = self._rois.find_zone_for_point(point)
         return detection, zone

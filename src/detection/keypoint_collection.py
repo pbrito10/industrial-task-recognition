@@ -6,6 +6,12 @@ from src.shared.point import Point
 
 # Índices das pontas de dedo segundo a convenção MediaPipe
 _FINGERTIP_INDICES = [4, 8, 12, 16, 20]
+
+# Índices dos MCP (metacarpofalângicas) dos 4 dedos — excluindo o polegar.
+# Os MCP são os nós na base dos dedos, sobre a palma.
+# Excluímos o polegar (MCP = índice 2) porque se move num plano diferente
+# dos restantes e introduziria desvio lateral no centróide.
+_FINGER_MCP_INDICES = [5, 9, 13, 17]
 _EXPECTED_COUNT = 21
 
 
@@ -34,6 +40,32 @@ class KeypointCollection:
         """Centro geométrico dos 21 pontos — mais robusto que o pulso em posições extremas."""
         avg_x = sum(kp.position.x for kp in self._keypoints) // _EXPECTED_COUNT
         avg_y = sum(kp.position.y for kp in self._keypoints) // _EXPECTED_COUNT
+        return Point(x=avg_x, y=avg_y)
+
+    def finger_mcp_centroid(self) -> Point:
+        """Centro geométrico dos MCP dos 4 dedos (índice, médio, anelar, mindinho).
+
+        Ponto de referência preferido para classificação de zonas neste sistema.
+
+        Porquê MCP e não pulso, fingertips ou centróide geral?
+          - Pulso: demasiado afastado da peça — pode estar fora da caixa
+            enquanto os dedos já estão dentro.
+          - Fingertips: movem-se significativamente durante o grasping
+            (mão a fechar), tornando o ponto instável exatamente quando
+            interessa saber que a mão está a pegar.
+          - Centróide dos 21: influenciado pelo pulso e pelos dedos,
+            menos preciso para localizar "onde a mão está a trabalhar".
+          - MCP dos 4 dedos: ficam na palma, sobre a zona de trabalho,
+            e não se deslocam ao abrir/fechar a mão — o ponto mantém-se
+            estável independentemente do estado do grasping.
+
+        Caso de uso típico: operador estica o braço para uma caixa,
+        o pulso fica fora da ROI mas os MCP estão dentro — a zona é
+        corretamente detetada.
+        """
+        mcps  = [self._keypoints[i] for i in _FINGER_MCP_INDICES]
+        avg_x = sum(kp.position.x for kp in mcps) // len(_FINGER_MCP_INDICES)
+        avg_y = sum(kp.position.y for kp in mcps) // len(_FINGER_MCP_INDICES)
         return Point(x=avg_x, y=avg_y)
 
     def fingertips(self) -> list[Keypoint]:
