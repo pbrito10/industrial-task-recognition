@@ -20,13 +20,11 @@ def run(detection_queue, stop_event, config, roi_path):
 
     import cv2
 
-    from src.events.event_logger import EventLogger
-    from src.events.zone_event import ZoneEvent
+    from src.events.debug_logger import DebugLogger
     from src.metrics.metrics_calculator import MetricsCalculator
     from src.output.dashboard_writer import DashboardWriter
     from src.output.excel_exporter import ExcelExporter
     from src.roi.json_roi_repository import JsonRoiRepository
-    from src.shared.event_type import EventType
     from src.tracking.activation_strategy import StillnessDwellStrategy
     from src.tracking.cycle_tracker import CycleTracker
     from src.tracking.task_state_machine import (
@@ -80,19 +78,22 @@ class _MonitorSession:
         self._dashboard_writer     = DashboardWriter(Path(config["dashboard"]["data_path"]))
         self._excel_exporter       = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
 
+        # Zona anterior por lado da mão — para detetar transições entre frames
+        self._prev_zones: dict[str, str | None] = {}
+
         one_hand   = OneHandStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
         two_hands  = TwoHandsStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
         self._state_machine = TaskStateMachine(one_hand, two_hands, config["tracking"]["two_hands_zones"])
 
     def execute(self, detection_queue, stop_event) -> None:
         from pathlib import Path
-        from src.events.event_logger import EventLogger
+        from src.events.debug_logger import DebugLogger
 
         output_dir = Path(self._config["output"]["excel_output_dir"])
-        with EventLogger(output_dir, self._session_start) as event_logger:
-            self._loop(detection_queue, stop_event, event_logger)
+        with DebugLogger(output_dir, self._session_start) as debug_logger:
+            self._loop(detection_queue, stop_event, debug_logger)
 
-    def _loop(self, detection_queue, stop_event, event_logger) -> None:
+    def _loop(self, detection_queue, stop_event, debug_logger) -> None:
         import queue
         import cv2
 
@@ -106,7 +107,7 @@ class _MonitorSession:
                 except queue.Empty:
                     continue
 
-                self._process_frame(frame_rgb, maos, event_logger)
+                self._process_frame(frame_rgb, maos, debug_logger)
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     stop_event.set()
@@ -114,7 +115,7 @@ class _MonitorSession:
             self._finalise()
             cv2.destroyAllWindows()
 
-    def _process_frame(self, frame_rgb, maos, event_logger) -> None:
+    def _process_frame(self, frame_rgb, maos, debug_logger) -> None:
         from datetime import datetime
         import cv2
         from src.video import frame_annotator
@@ -124,10 +125,11 @@ class _MonitorSession:
 
         classified_hands = self._zone_classifier.classify(maos)
         self._update_last_detections(classified_hands)
+        self._log_zone_transitions(classified_hands, now, debug_logger)
 
         task_event = self._state_machine.update(classified_hands, now)
         if task_event is not None:
-            self._handle_task_event(task_event, event_logger)
+            self._handle_task_event(task_event, debug_logger)
 
         self._maybe_refresh_dashboard(now)
 
@@ -141,9 +143,36 @@ class _MonitorSession:
             if zone is not None:
                 self._last_detection_per_zone[zone.name] = detection
 
-    def _handle_task_event(self, task_event, event_logger) -> None:
-        _log_zone_events(task_event, self._session_start, self._frame_idx,
-                         self._last_detection_per_zone, event_logger)
+    def _log_zone_transitions(self, classified_hands, now, debug_logger) -> None:
+        """Deteta entradas e saídas de zona comparando com o frame anterior."""
+        current: dict[str, tuple[str | None, object]] = {
+            detection.hand_side.value: (zone.name if zone else None, detection)
+            for detection, zone in classified_hands
+        }
+        relative = now - self._session_start
+
+        for key in set(self._prev_zones) | set(current):
+            prev_zone              = self._prev_zones.get(key)
+            curr_zone, detection   = current.get(key, (None, None))
+
+            if prev_zone == curr_zone:
+                continue
+
+            if prev_zone is not None:
+                last_det = self._last_detection_per_zone.get(prev_zone)
+                if last_det is not None:
+                    debug_logger.log_zone_exit(now, relative, prev_zone, last_det, self._frame_idx)
+
+            if curr_zone is not None and detection is not None:
+                debug_logger.log_zone_enter(now, relative, curr_zone, detection, self._frame_idx)
+
+        self._prev_zones = {k: v[0] for k, v in current.items()}
+
+    def _handle_task_event(self, task_event, debug_logger) -> None:
+        if task_event.was_forced:
+            debug_logger.log_task_timeout(task_event)
+        else:
+            debug_logger.log_task_complete(task_event)
 
         cycle_duration = self._cycle_tracker.record(task_event)
         self._metrics.record(task_event)
@@ -164,38 +193,3 @@ class _MonitorSession:
         self._excel_exporter.write(snapshot)
 
 
-def _log_zone_events(task_event, session_start, frame_idx, last_detection_per_zone, event_logger) -> None:
-    """Gera ENTER + EXIT ZoneEvents a partir de um TaskEvent para o CSV de debug.
-
-    Usa a última deteção conhecida para preencher posição, lado e confiança.
-    Não regista se não houver deteção guardada para a zona.
-    """
-    from src.events.zone_event import ZoneEvent
-    from src.shared.event_type import EventType
-
-    detection = last_detection_per_zone.get(task_event.zone_name)
-    if detection is None:
-        return
-
-    event_logger.log(ZoneEvent(
-        timestamp=task_event.start_time,
-        relative_time=task_event.start_time - session_start,
-        event_type=EventType.ENTER,
-        zone=task_event.zone_name,
-        hand=detection.hand_side,
-        position=detection.bounding_box.center(),
-        confidence=detection.confidence,
-        frame_idx=frame_idx,
-        was_forced=False,
-    ))
-    event_logger.log(ZoneEvent(
-        timestamp=task_event.end_time,
-        relative_time=task_event.end_time - session_start,
-        event_type=EventType.EXIT,
-        zone=task_event.zone_name,
-        hand=detection.hand_side,
-        position=detection.bounding_box.center(),
-        confidence=detection.confidence,
-        frame_idx=frame_idx,
-        was_forced=task_event.was_forced,
-    ))
