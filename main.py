@@ -13,14 +13,14 @@
 #   para sinalizar que todos devem parar.
 #
 #   MODO "Testar Câmara":
-#     camera.py → frame_queue → detector.py → detection_queue → display.py
+#     capture_process.py → frame_queue → detection_process.py → detection_queue → display_process.py
 #
 #   MODO "Definir ROIs":
 #     Corre no processo principal (não usa processos separados).
 #     O RoiDrawer abre a câmara diretamente e gere a sessão interativa.
 #
 #   MODO "Correr Programa":
-#     camera.py → frame_queue → detector.py → detection_queue → pipeline.py
+#     capture_process.py → frame_queue → detection_process.py → detection_queue → monitor_process.py
 #
 # ── O que flui entre blocos ──────────────────────────────────────────────────
 #
@@ -46,50 +46,61 @@ _ROI_PATH    = Path(__file__).parent / "config" / "rois.json"
 
 
 def run_camera(frame_queue, stop_event, config):
-    import camera
-    camera.run(frame_queue, stop_event, config)
+    import capture_process
+    capture_process.run(frame_queue, stop_event, config)
 
 
 def run_detector(frame_queue, detection_queue, stop_event, config):
-    import detector
-    detector.run(frame_queue, detection_queue, stop_event, config)
+    import detection_process
+    detection_process.run(frame_queue, detection_queue, stop_event, config)
 
 
 def run_display(detection_queue, stop_event):
-    import display
-    display.run(detection_queue, stop_event)
+    import display_process
+    display_process.run(detection_queue, stop_event)
 
 
 def run_pipeline(detection_queue, stop_event, config, roi_path):
-    import pipeline
-    pipeline.run(detection_queue, stop_event, config, roi_path)
+    import monitor_process
+    monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
-# ── Função auxiliar de lançamento ────────────────────────────────────────────
+# ── Funções auxiliares de lançamento ─────────────────────────────────────────
 
-def _launch(stop_event, **processos):
-    """Arranca os processos, aguarda e trata paragem (Ctrl+C ou 'q' na janela)."""
+def _start_processes(processos: dict) -> None:
+    """Arranca cada processo com um breve intervalo e mostra o PID."""
     print("A arrancar processos...")
     for nome, processo in processos.items():
         processo.start()
         time.sleep(0.5)
         print(f"  [{nome}] iniciado (PID {processo.pid})")
-
     print("A correr. Carrega 'q' na janela para parar.\n")
 
+
+def _wait_for_stop(stop_event) -> None:
+    """Bloqueia até Ctrl+C ou até o stop_event ser ativado por outro processo."""
     try:
-        while True:
+        while not stop_event.is_set():
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nCtrl+C — a parar...")
         stop_event.set()
 
+
+def _terminate_processes(processos: dict) -> None:
+    """Aguarda que cada processo termine; força terminação se necessário."""
     for processo in processos.values():
         processo.join(timeout=3)
         if processo.is_alive():
             processo.terminate()
-
     print("Processos terminados.")
+
+
+def _launch(stop_event, **processos):
+    """Orquestra o ciclo de vida dos processos: arrancar → aguardar → terminar."""
+    _start_processes(processos)
+    _wait_for_stop(stop_event)
+    _terminate_processes(processos)
 
 
 # ── Modos de funcionamento ────────────────────────────────────────────────────
@@ -99,7 +110,7 @@ def testar_camera(config):
     Abre a câmara e mostra o feed com keypoints das mãos.
     Útil para verificar se a câmara e o MediaPipe estão a funcionar.
 
-    Blocos: camera → detector → display
+    Blocos: capture → detector → display
     """
     frame_queue     = Queue(maxsize=2)
     detection_queue = Queue(maxsize=5)
@@ -152,10 +163,9 @@ def definir_rois(config):
 
 def correr_programa(config):
     """
-    Corre o pipeline completo de análise.
-    Mostra o feed com ROIs e keypoints. Futuramente incluirá tracking e métricas.
+    Corre o pipeline completo de análise com tracking, métricas e dashboard.
 
-    Blocos: camera → detector → pipeline
+    Blocos: capture → detector → monitor
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 

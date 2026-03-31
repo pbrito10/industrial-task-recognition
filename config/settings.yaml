@@ -15,6 +15,7 @@ detection:
 tracking:
   dwell_time_seconds: 0.5       # tempo mínimo na zona para confirmar tarefa
   task_timeout_seconds: 30.0    # tempo máximo numa tarefa antes de forçar fecho
+  stillness_threshold_px: 5.0   # velocidade máxima do pulso (px/frame) para considerar mão parada
                                  # cobre: pausas do operador e falhas de deteção
   zones:                         # zonas físicas únicas da bancada (para desenhar as ROIs)
     - "Zona da Porca"

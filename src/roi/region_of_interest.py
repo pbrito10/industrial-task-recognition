@@ -3,6 +3,13 @@ from dataclasses import dataclass
 
 from src.shared.point import Point
 
+# Chaves do formato JSON — constantes para evitar magic strings em to_dict/from_dict
+_KEY_NAME = "name"
+_KEY_X1   = "x1"
+_KEY_Y1   = "y1"
+_KEY_X2   = "x2"
+_KEY_Y2   = "y2"
+
 
 @dataclass(frozen=True)
 class RegionOfInterest:
@@ -26,18 +33,18 @@ class RegionOfInterest:
     def to_dict(self) -> dict:
         """Serialização para JSON — coordenadas como ints simples para legibilidade."""
         return {
-            "name": self.name,
-            "x1": self.top_left.x,
-            "y1": self.top_left.y,
-            "x2": self.bottom_right.x,
-            "y2": self.bottom_right.y,
+            _KEY_NAME: self.name,
+            _KEY_X1:   self.top_left.x,
+            _KEY_Y1:   self.top_left.y,
+            _KEY_X2:   self.bottom_right.x,
+            _KEY_Y2:   self.bottom_right.y,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> RegionOfInterest:
         """Reconstrói um RegionOfInterest a partir de um dict JSON."""
         return cls(
-            name=data["name"],
-            top_left=Point(x=data["x1"], y=data["y1"]),
-            bottom_right=Point(x=data["x2"], y=data["y2"]),
+            name=data[_KEY_NAME],
+            top_left=Point(x=data[_KEY_X1], y=data[_KEY_Y1]),
+            bottom_right=Point(x=data[_KEY_X2], y=data[_KEY_Y2]),
         )

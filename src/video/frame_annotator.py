@@ -53,24 +53,31 @@ def zone_color(name: str) -> tuple[int, int, int]:
     return _ZONE_COLOR_MAP.get(name, _ZONE_COLOR_DEFAULT)
 
 
-# ── API pública ──────────────────────────────────────────────────────────────
+# ── Funções de desenho (privadas) ────────────────────────────────────────────
 
-def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
-    """Desenha esqueleto, keypoints e bounding box de uma mão."""
-    color = _HAND_COLORS[detection.hand_side]
-    keypoints = detection.keypoints
-
-    # Linhas do esqueleto
+def _draw_skeleton(frame: np.ndarray, keypoints, color: tuple[int, int, int]) -> None:
+    """Traça as linhas de ligação entre landmarks que formam o esqueleto."""
     for start_idx, end_idx in _HAND_CONNECTIONS:
         start = keypoints.by_index(start_idx).position
-        end = keypoints.by_index(end_idx).position
+        end   = keypoints.by_index(end_idx).position
         cv2.line(frame, (start.x, start.y), (end.x, end.y), color, _LINE_THICKNESS)
 
-    # Keypoints
+
+def _draw_keypoints(frame: np.ndarray, keypoints, color: tuple[int, int, int]) -> None:
+    """Desenha um círculo em cada landmark."""
     for kp in keypoints.all():
         cv2.circle(frame, (kp.position.x, kp.position.y), _KEYPOINT_RADIUS, color, -1)
 
-    # Bounding box + label
+
+def _draw_bounding_box(
+    frame: np.ndarray,
+    detection: HandDetection,
+    color: tuple[int, int, int],
+) -> None:
+    """Desenha o retângulo e o label com lado e confiança.
+
+    O lado exibido é o invertido da deteção porque a câmara está em espelho.
+    """
     tl = detection.bounding_box.top_left
     br = detection.bounding_box.bottom_right
     cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), color, _LINE_THICKNESS)
@@ -78,6 +85,16 @@ def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
     flipped_side = HandSide.RIGHT if detection.hand_side == HandSide.LEFT else HandSide.LEFT
     label = f"{flipped_side.value}  {detection.confidence.as_percentage():.0f}%"
     cv2.putText(frame, label, (tl.x, tl.y - 8), _FONT, 0.5, color, 1)
+
+
+# ── API pública ──────────────────────────────────────────────────────────────
+
+def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
+    """Desenha esqueleto, keypoints e bounding box de uma mão."""
+    color = _HAND_COLORS[detection.hand_side]
+    _draw_skeleton(frame, detection.keypoints, color)
+    _draw_keypoints(frame, detection.keypoints, color)
+    _draw_bounding_box(frame, detection, color)
 
 
 def draw_detections(frame: np.ndarray, detections: list[HandDetection]) -> None:

@@ -157,13 +157,6 @@ def _render(frame: np.ndarray, rois: RoiCollection, session: _SessionState) -> N
 
 # ── DrawingSession ────────────────────────────────────────────────────────────
 
-_MOUSE_HANDLERS = {
-    cv2.EVENT_LBUTTONDOWN: "_on_mouse_down",
-    cv2.EVENT_MOUSEMOVE:   "_on_mouse_move",
-    cv2.EVENT_LBUTTONUP:   "_on_mouse_up",
-}
-
-
 class _DrawingSession:
     """Gere o estado da sessão interativa (SRP).
 
@@ -182,11 +175,17 @@ class _DrawingSession:
         _render(frame, self._rois, self._session)
 
     def handle_mouse(self, event: int, x: int, y: int, flags: int, param) -> None:
-        handler_name = _MOUSE_HANDLERS.get(event)
-        if handler_name is None:
-            return
-        self._session.mouse.position = Point(x=x, y=y)
-        getattr(self, handler_name)(Point(x=x, y=y))
+        point = Point(x=x, y=y)
+        self._session.mouse.position = point
+
+        # Despacho direto — sem magic strings nem getattr
+        handlers = {
+            cv2.EVENT_LBUTTONDOWN: self._on_mouse_down,
+            cv2.EVENT_LBUTTONUP:   self._on_mouse_up,
+        }
+        handler = handlers.get(event)
+        if handler is not None:
+            handler(point)
 
     def handle_key(self, key: int) -> _Signal:
         if key == ord('q'):
@@ -205,9 +204,6 @@ class _DrawingSession:
         if self._session.selection.index is None:
             return
         self._session.mouse.drag = _DrawingState(start=point)
-
-    def _on_mouse_move(self, point: Point) -> None:
-        pass  # posição já foi atualizada em handle_mouse
 
     def _on_mouse_up(self, point: Point) -> None:
         if not isinstance(self._session.mouse.drag, _DrawingState):
@@ -248,7 +244,7 @@ class _DrawingSession:
     def _missing_zones(self) -> list[str]:
         return [
             name for name in self._session.selection.names
-            if not self._rois.contains_zone(name)
+            if not self._rois.contains(name)
         ]
 
     def _selected_zone_name(self) -> str | None:

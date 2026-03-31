@@ -33,7 +33,8 @@ class RoiCollection:
         """Devolve a zona com o nome dado, ou None."""
         return self._rois.get(name)
 
-    def contains_zone(self, name: str) -> bool:
+    def contains(self, name: str) -> bool:
+        """Indica se existe uma zona com este nome na coleção."""
         return name in self._rois
 
     def is_empty(self) -> bool:

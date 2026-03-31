@@ -15,6 +15,7 @@
 
 
 def run(detection_queue, stop_event):
+    import queue
     import time
 
     import cv2
@@ -29,7 +30,7 @@ def run(detection_queue, stop_event):
         while not stop_event.is_set():
             try:
                 frame_rgb, maos = detection_queue.get(timeout=0.1)
-            except Exception:
+            except queue.Empty:
                 continue
 
             frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)

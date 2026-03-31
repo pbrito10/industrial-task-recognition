@@ -18,6 +18,7 @@
 
 
 def run(frame_queue, stop_event, config):
+    import queue
     import cv2
 
     from src.video.camera import Camera
@@ -43,7 +44,7 @@ def run(frame_queue, stop_event, config):
             if frame_queue.full():
                 try:
                     frame_queue.get_nowait()
-                except Exception:
+                except queue.Empty:
                     pass
 
             frame_queue.put(frame_rgb)

@@ -17,6 +17,8 @@
 
 
 def run(frame_queue, detection_queue, stop_event, config):
+    import queue
+
     from src.detection.mediapipe_detector import MediapipeDetector
 
     detector = MediapipeDetector(
@@ -30,7 +32,7 @@ def run(frame_queue, detection_queue, stop_event, config):
         while not stop_event.is_set():
             try:
                 frame = frame_queue.get(timeout=0.1)
-            except Exception:
+            except queue.Empty:
                 continue
 
             maos = detector.detect(frame)
