@@ -29,6 +29,7 @@
 #
 # ═══════════════════════════════════════════════════════════════════════════════
 
+import subprocess
 import time
 from multiprocessing import Event, Process, Queue, set_start_method
 from pathlib import Path
@@ -65,12 +66,6 @@ def run_pipeline(detection_queue, stop_event, config, roi_path):
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
-def run_dashboard():
-    import os
-    # Substitui este processo pelo servidor Streamlit.
-    # Quando _terminate_processes chamar terminate(), o Streamlit é morto diretamente.
-    app_path = str(Path(__file__).parent / "dashboard" / "app.py")
-    os.execvp("streamlit", ["streamlit", "run", app_path])
 
 
 # ── Funções auxiliares de lançamento ─────────────────────────────────────────
@@ -173,7 +168,9 @@ def correr_programa(config):
     """
     Corre o pipeline completo de análise com tracking, métricas e dashboard.
 
-    Blocos: capture → detector → monitor + dashboard (Streamlit)
+    Blocos: capture → detector → monitor
+    O dashboard Streamlit arranca como processo externo (subprocess) — não é um
+    estágio do pipeline e não usa queues nem stop_event.
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
@@ -185,16 +182,25 @@ def correr_programa(config):
     detection_queue = Queue(maxsize=5)
     stop_event      = Event()
 
-    _launch(
-        stop_event,
-        camera    = Process(target=run_camera,     name="camera",
-                            args=(frame_queue, stop_event, config)),
-        detector  = Process(target=run_detector,   name="detector",
-                            args=(frame_queue, detection_queue, stop_event, config)),
-        pipeline  = Process(target=run_pipeline,   name="pipeline",
-                            args=(detection_queue, stop_event, config, str(_ROI_PATH))),
-        dashboard = Process(target=run_dashboard,  name="dashboard"),
+    app_path       = Path(__file__).parent / "dashboard" / "app.py"
+    dashboard_proc = subprocess.Popen(
+        ["streamlit", "run", str(app_path)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
+
+    try:
+        _launch(
+            stop_event,
+            camera   = Process(target=run_camera,   name="camera",
+                               args=(frame_queue, stop_event, config)),
+            detector = Process(target=run_detector, name="detector",
+                               args=(frame_queue, detection_queue, stop_event, config)),
+            pipeline = Process(target=run_pipeline, name="pipeline",
+                               args=(detection_queue, stop_event, config, str(_ROI_PATH))),
+        )
+    finally:
+        dashboard_proc.terminate()
 
 
 # ── Menu ──────────────────────────────────────────────────────────────────────
