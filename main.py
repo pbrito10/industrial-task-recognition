@@ -81,7 +81,7 @@ def _wait_for_stop(stop_event) -> None:
     """Bloqueia até Ctrl+C ou até o stop_event ser ativado por outro processo."""
     try:
         while not stop_event.is_set():
-            time.sleep(1)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nCtrl+C — a parar...")
         stop_event.set()

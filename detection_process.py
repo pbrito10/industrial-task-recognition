@@ -36,6 +36,12 @@ def run(frame_queue, detection_queue, stop_event, config):
                 continue
 
             maos = detector.detect(frame)
-            detection_queue.put((frame, maos))
+
+            # Descarta o resultado se a queue estiver cheia — evita bloquear
+            # quando o consumidor parou (ex: stop_event ativo).
+            try:
+                detection_queue.put((frame, maos), timeout=0.1)
+            except queue.Full:
+                pass
     finally:
         detector.release()
