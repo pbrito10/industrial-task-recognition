@@ -35,7 +35,7 @@ from src.video.camera import Camera
 
 # ── Constantes ───────────────────────────────────────────────────────────────
 
-_WINDOW_NAME = "Definir ROIs  |  1-9 zona  |  Del apagar  |  s guardar  |  q sair"
+_WINDOW_NAME = "Definir ROIs  |  1-7 zona  |  Del apagar  |  s guardar  |  q sair"
 _MIN_ROI_PIXELS = 15
 _FONT = cv2.FONT_HERSHEY_SIMPLEX
 

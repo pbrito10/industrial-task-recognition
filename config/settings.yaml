@@ -18,30 +18,30 @@ tracking:
   stillness_threshold_px: 5.0   # velocidade máxima do pulso (px/frame) para considerar mão parada
                                  # cobre: pausas do operador e falhas de deteção
   zones:                         # zonas físicas únicas da bancada (para desenhar as ROIs)
-    - "Zona da Porca"
-    - "Zona do Chassi Inferior"
-    - "Zona das Rodas"
-    - "Zona do Chassi Superior"
-    - "Zona do Parafuso"
-    - "Zona de Montagem"
-    - "Zona de Saida"
+    - "Porca"
+    - "Inferior"
+    - "Rodas"
+    - "Chassi Superior"
+    - "Parafuso"
+    - "Montagem"
+    - "Saida"
   two_hands_zones:               # zonas que exigem as duas mãos em simultâneo
-    - "Zona de Montagem"
+    - "Montagem"
   cycle_zone_order:              # ordem esperada das zonas num ciclo completo
                                  # a Zona das Rodas pode aparecer 1 a 4 vezes
                                  # dependendo de quantas rodas o operador traz de cada vez
-    - "Zona da Porca"
-    - "Zona de Montagem"
-    - "Zona do Chassi Inferior"
-    - "Zona de Montagem"
-    - "Zona das Rodas"
-    - "Zona de Montagem"
-    - "Zona do Chassi Superior"
-    - "Zona de Montagem"
-    - "Zona do Parafuso"
-    - "Zona de Montagem"
-    - "Zona de Saida"
-  exit_zone: "Zona de Saida"     # zona cuja conclusão fecha o ciclo
+    - "Porca"
+    - "Montagem"
+    - "Chassi Inferior"
+    - "Montagem"
+    - "Rodas"
+    - "Montagem"
+    - "Chassi Superior"
+    - "Montagem"
+    - "Parafuso"
+    - "Montagem"
+    - "Saida"
+  exit_zone: "Saida"     # zona cuja conclusão fecha o ciclo
 
 dashboard:
   data_path: "dashboard/data/metrics.json"
