@@ -1,22 +1,30 @@
-# TODO: implementar
-#
-# Classifica em que zona estão as mãos detetadas.
-#
-# Responsabilidade: receber as HandDetections de um frame e determinar
-# em que ROI cada mão se encontra, consultando a RoiCollection.
-#
-# Lógica:
-#   - Para cada HandDetection, obtém o ponto de referência:
-#       → usa bounding_box.center() que devolve um Point
-#         (ver detection/bounding_box.py e shared/point.py)
-#       → alternativa configurável: hand_detection.wrist() se a bbox
-#         não estiver disponível ou tiver baixa confiança
-#   - Consulta roi_collection.find_zone_for_point(point: Point)
-#   - Devolve uma lista de (HandDetection, RegionOfInterest | None)
-#
-# Se a mão não estiver em nenhuma zona, devolve None para essa mão
-# (mão em trânsito entre zonas).
-#
-# Com duas mãos: pode haver situações em que ambas estão na mesma
-# zona em simultâneo — isso é tratado pela TaskStateMachine, não aqui.
-# Este classificador apenas reporta o que vê, sem interpretar.
+from __future__ import annotations
+
+from src.detection.hand_detection import HandDetection
+from src.roi.region_of_interest import RegionOfInterest
+from src.roi.roi_collection import RoiCollection
+
+# Par (deteção, zona) — zona é None se a mão estiver em trânsito
+ClassifiedHand = tuple[HandDetection, RegionOfInterest | None]
+
+
+class ZoneClassifier:
+    """Mapeia cada mão detetada para a zona em que se encontra.
+
+    Reporta apenas o que vê — não interpreta nem acumula estado.
+    Dois resultados None num frame significa duas mãos em trânsito;
+    interpretar isso é responsabilidade da TaskStateMachine.
+    """
+
+    def __init__(self, rois: RoiCollection) -> None:
+        self._rois = rois
+
+    def classify(self, detections: list[HandDetection]) -> list[ClassifiedHand]:
+        """Devolve cada deteção emparelhada com a sua zona (ou None)."""
+        return [self._classify_one(detection) for detection in detections]
+
+    def _classify_one(self, detection: HandDetection) -> ClassifiedHand:
+        """Localiza a mão usando o centro da bounding box."""
+        point = detection.bounding_box.center()
+        zone  = self._rois.find_zone_for_point(point)
+        return detection, zone
