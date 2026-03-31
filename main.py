@@ -65,6 +65,14 @@ def run_pipeline(detection_queue, stop_event, config, roi_path):
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
+def run_dashboard():
+    import os
+    # Substitui este processo pelo servidor Streamlit.
+    # Quando _terminate_processes chamar terminate(), o Streamlit é morto diretamente.
+    app_path = str(Path(__file__).parent / "dashboard" / "app.py")
+    os.execvp("streamlit", ["streamlit", "run", app_path])
+
+
 # ── Funções auxiliares de lançamento ─────────────────────────────────────────
 
 def _start_processes(processos: dict) -> None:
@@ -165,7 +173,7 @@ def correr_programa(config):
     """
     Corre o pipeline completo de análise com tracking, métricas e dashboard.
 
-    Blocos: capture → detector → monitor
+    Blocos: capture → detector → monitor + dashboard (Streamlit)
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
@@ -179,12 +187,13 @@ def correr_programa(config):
 
     _launch(
         stop_event,
-        camera   = Process(target=run_camera,   name="camera",
-                           args=(frame_queue, stop_event, config)),
-        detector = Process(target=run_detector, name="detector",
-                           args=(frame_queue, detection_queue, stop_event, config)),
-        pipeline = Process(target=run_pipeline, name="pipeline",
-                           args=(detection_queue, stop_event, config, str(_ROI_PATH))),
+        camera    = Process(target=run_camera,     name="camera",
+                            args=(frame_queue, stop_event, config)),
+        detector  = Process(target=run_detector,   name="detector",
+                            args=(frame_queue, detection_queue, stop_event, config)),
+        pipeline  = Process(target=run_pipeline,   name="pipeline",
+                            args=(detection_queue, stop_event, config, str(_ROI_PATH))),
+        dashboard = Process(target=run_dashboard,  name="dashboard"),
     )
 
 
