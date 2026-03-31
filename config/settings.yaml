@@ -19,7 +19,7 @@ tracking:
                                  # cobre: pausas do operador e falhas de deteção
   zones:                         # zonas físicas únicas da bancada (para desenhar as ROIs)
     - "Porca"
-    - "Inferior"
+    - "Chassi Inferior"
     - "Rodas"
     - "Chassi Superior"
     - "Parafuso"

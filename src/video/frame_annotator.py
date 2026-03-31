@@ -42,8 +42,8 @@ _ZONE_COLOR_ASSEMBLY = (0, 165, 255)    # laranja — zona de montagem
 _ZONE_COLOR_EXIT     = (255, 100, 0)    # azul — zona de saída
 
 _ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
-    "Zona de Montagem": _ZONE_COLOR_ASSEMBLY,
-    "Zona de Saida":    _ZONE_COLOR_EXIT,
+    "Montagem": _ZONE_COLOR_ASSEMBLY,
+    "Saida":    _ZONE_COLOR_EXIT,
 }
 
 
