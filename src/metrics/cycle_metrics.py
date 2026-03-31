@@ -12,22 +12,37 @@ class CycleMetrics:
     """
 
     def __init__(self) -> None:
-        self._durations: list[timedelta] = []
+        self._durations:     list[timedelta] = []
+        self._in_order_count: int            = 0
 
-    def add(self, duration: timedelta) -> None:
-        """Regista a duração de um ciclo completo."""
+    def add(self, duration: timedelta, order_ok: bool) -> None:
+        """Regista a duração de um ciclo completo e se a ordem foi respeitada."""
         self._durations.append(duration)
+        if order_ok:
+            self._in_order_count += 1
+
+    def count_in_order(self) -> int:
+        """Ciclos que respeitaram a ordem definida em cycle_zone_order."""
+        return self._in_order_count
+
+    def count_out_of_order(self) -> int:
+        """Ciclos com zonas visitadas fora da ordem esperada."""
+        return self.count() - self._in_order_count
 
     def count(self) -> int:
+        """Total de ciclos completos registados."""
         return len(self._durations)
 
     def minimum(self) -> timedelta:
+        """Duração do ciclo mais rápido. Requer count() > 0."""
         return min(self._durations)
 
     def maximum(self) -> timedelta:
+        """Duração do ciclo mais lento. Requer count() > 0."""
         return max(self._durations)
 
     def average(self) -> timedelta:
+        """Tempo médio de ciclo. Requer count() > 0."""
         total = sum((d.total_seconds() for d in self._durations), 0.0)
         return timedelta(seconds=total / self.count())
 

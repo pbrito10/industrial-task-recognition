@@ -73,7 +73,10 @@ class _MonitorSession:
         strategy      = StillnessDwellStrategy(config["tracking"]["stillness_threshold_px"])
         self._refresh_interval = timedelta(seconds=config["dashboard"]["refresh_seconds"])
 
-        self._cycle_tracker        = CycleTracker(exit_zone=config["tracking"]["exit_zone"])
+        self._cycle_tracker        = CycleTracker(
+            exit_zone=config["tracking"]["exit_zone"],
+            expected_order=config["tracking"]["cycle_zone_order"],
+        )
         self._metrics              = MetricsCalculator(self._session_start, config["tracking"]["zones"])
         self._dashboard_writer     = DashboardWriter(Path(config["dashboard"]["data_path"]))
         self._excel_exporter       = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
@@ -145,28 +148,32 @@ class _MonitorSession:
 
     def _log_zone_transitions(self, classified_hands, now, debug_logger) -> None:
         """Deteta entradas e saídas de zona comparando com o frame anterior."""
-        current: dict[str, tuple[str | None, object]] = {
+        current = {
             detection.hand_side.value: (zone.name if zone else None, detection)
             for detection, zone in classified_hands
         }
         relative = now - self._session_start
 
         for key in set(self._prev_zones) | set(current):
-            prev_zone              = self._prev_zones.get(key)
-            curr_zone, detection   = current.get(key, (None, None))
-
-            if prev_zone == curr_zone:
-                continue
-
-            if prev_zone is not None:
-                last_det = self._last_detection_per_zone.get(prev_zone)
-                if last_det is not None:
-                    debug_logger.log_zone_exit(now, relative, prev_zone, last_det, self._frame_idx)
-
-            if curr_zone is not None and detection is not None:
-                debug_logger.log_zone_enter(now, relative, curr_zone, detection, self._frame_idx)
+            self._check_zone_transition(key, current, now, relative, debug_logger)
 
         self._prev_zones = {k: v[0] for k, v in current.items()}
+
+    def _check_zone_transition(self, key, current, now, relative, debug_logger) -> None:
+        """Verifica e regista transição de zona para uma mão específica."""
+        prev_zone            = self._prev_zones.get(key)
+        curr_zone, detection = current.get(key, (None, None))
+
+        if prev_zone == curr_zone:
+            return
+
+        if prev_zone is not None:
+            last_det = self._last_detection_per_zone.get(prev_zone)
+            if last_det is not None:
+                debug_logger.log_zone_exit(now, relative, prev_zone, last_det, self._frame_idx)
+
+        if curr_zone is not None and detection is not None:
+            debug_logger.log_zone_enter(now, relative, curr_zone, detection, self._frame_idx)
 
     def _handle_task_event(self, task_event, debug_logger) -> None:
         if task_event.was_forced:
@@ -174,12 +181,14 @@ class _MonitorSession:
         else:
             debug_logger.log_task_complete(task_event)
 
-        cycle_duration = self._cycle_tracker.record(task_event)
+        cycle_result = self._cycle_tracker.record(task_event)
         self._metrics.record(task_event)
         self._excel_exporter.add_event(task_event)
 
-        if cycle_duration is not None:
-            self._metrics.record_cycle(cycle_duration)
+        if cycle_result is not None:
+            self._metrics.record_cycle(cycle_result)
+            self._excel_exporter.add_cycle_result(cycle_result)
+            debug_logger.log_cycle_complete(cycle_result)
 
     def _maybe_refresh_dashboard(self, now) -> None:
         from datetime import datetime

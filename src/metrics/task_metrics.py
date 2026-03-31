@@ -22,15 +22,19 @@ class TaskMetrics:
         self._durations.append(duration)
 
     def count(self) -> int:
+        """Número de ocorrências registadas para esta zona."""
         return len(self._durations)
 
     def minimum(self) -> timedelta:
+        """Duração mínima observada. Requer count() > 0."""
         return min(self._durations)
 
     def maximum(self) -> timedelta:
+        """Duração máxima observada. Requer count() > 0."""
         return max(self._durations)
 
     def average(self) -> timedelta:
+        """Média aritmética das durações. Requer count() > 0."""
         total = sum((d.total_seconds() for d in self._durations), 0.0)
         return timedelta(seconds=total / self.count())
 

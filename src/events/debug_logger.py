@@ -6,6 +6,7 @@ from pathlib import Path
 from types import TracebackType
 
 from src.detection.hand_detection import HandDetection
+from src.tracking.cycle_result import CycleResult
 from src.tracking.task_event import TaskEvent
 
 _COLUMNS = [
@@ -20,17 +21,19 @@ _COLUMNS = [
     "frame_idx",
     "duration_s",
     "cycle_number",
+    "order_ok",
 ]
 
 
 class DebugLogger:
     """Regista todos os eventos relevantes do pipeline num CSV em tempo real.
 
-    Cobre quatro tipos de evento:
-      ZONE_ENTER    — mão entrou numa zona (detetado pelo ZoneClassifier)
-      ZONE_EXIT     — mão saiu de uma zona
-      TASK_COMPLETE — tarefa confirmada (dwell completo, was_forced=False)
-      TASK_TIMEOUT  — tarefa cancelada por timeout (was_forced=True)
+    Cobre cinco tipos de evento:
+      ZONE_ENTER     — mão entrou numa zona (detetado pelo ZoneClassifier)
+      ZONE_EXIT      — mão saiu de uma zona
+      TASK_COMPLETE  — tarefa confirmada (dwell completo, was_forced=False)
+      TASK_TIMEOUT   — tarefa cancelada por timeout (was_forced=True)
+      CYCLE_COMPLETE — ciclo fechado na zona de saída; inclui order_ok
 
     Cada linha é escrita e descarregada imediatamente — se o programa fechar
     inesperadamente os dados chegam na mesma ao disco.
@@ -39,6 +42,7 @@ class DebugLogger:
         with DebugLogger(output_dir, session_start) as logger:
             logger.log_zone_enter(...)
             logger.log_task_complete(...)
+            logger.log_cycle_complete(...)
     """
 
     def __init__(self, output_dir: Path, session_start: datetime) -> None:
@@ -52,7 +56,7 @@ class DebugLogger:
         self._writer.writeheader()
         self._file.flush()
 
-    # ── Zona ────────────────────────────────────────────────────────────────
+    # ── Zona ─────────────────────────────────────────────────────────────────
 
     def log_zone_enter(
         self,
@@ -74,7 +78,7 @@ class DebugLogger:
     ) -> None:
         self._write_zone_row("ZONE_EXIT", timestamp, relative_time, zone_name, detection, frame_idx)
 
-    # ── Tarefa ───────────────────────────────────────────────────────────────
+    # ── Tarefa ────────────────────────────────────────────────────────────────
 
     def log_task_complete(self, task_event: TaskEvent) -> None:
         self._write_task_row("TASK_COMPLETE", task_event)
@@ -82,7 +86,27 @@ class DebugLogger:
     def log_task_timeout(self, task_event: TaskEvent) -> None:
         self._write_task_row("TASK_TIMEOUT", task_event)
 
-    # ── Internos ─────────────────────────────────────────────────────────────
+    # ── Ciclo ─────────────────────────────────────────────────────────────────
+
+    def log_cycle_complete(self, cycle_result: CycleResult) -> None:
+        """Regista o fecho de um ciclo com duração, número e verificação de ordem."""
+        relative = self._session_start  # placeholder; usamos end_time via duration
+        self._write({
+            "timestamp_iso":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3],
+            "relative_time_s": "",
+            "event_type":      "CYCLE_COMPLETE",
+            "zone":            "",
+            "hand":            "",
+            "x_px":            "",
+            "y_px":            "",
+            "confidence":      "",
+            "frame_idx":       "",
+            "duration_s":      round(cycle_result.duration.total_seconds(), 3),
+            "cycle_number":    cycle_result.cycle_number,
+            "order_ok":        "true" if cycle_result.order_ok else "false",
+        })
+
+    # ── Internos ──────────────────────────────────────────────────────────────
 
     def _write_zone_row(
         self,
@@ -106,6 +130,7 @@ class DebugLogger:
             "frame_idx":       frame_idx,
             "duration_s":      "",
             "cycle_number":    "",
+            "order_ok":        "",
         })
 
     def _write_task_row(self, event_type: str, task_event: TaskEvent) -> None:
@@ -122,6 +147,7 @@ class DebugLogger:
             "frame_idx":       "",
             "duration_s":      round(task_event.duration.total_seconds(), 3),
             "cycle_number":    task_event.cycle_number,
+            "order_ok":        "",
         })
 
     def _write(self, row: dict) -> None:

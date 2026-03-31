@@ -38,7 +38,9 @@ class RoiCollection:
         return name in self._rois
 
     def is_empty(self) -> bool:
+        """True se não existir nenhuma zona na coleção."""
         return len(self._rois) == 0
 
     def all(self) -> list[RegionOfInterest]:
+        """Devolve todas as zonas como lista (cópia — seguro para iterar)."""
         return list(self._rois.values())

@@ -42,17 +42,21 @@ def _fmt_seconds(s: float) -> str:
 # ── Secções do dashboard ──────────────────────────────────────────────────────
 
 def _render_summary(data: dict) -> None:
-    """Secção 1 — Ciclos, tempo médio de ciclo e duração da sessão."""
+    """Secção 1 — Ciclos, tempo médio de ciclo, ordem e duração da sessão."""
     st.subheader("Resumo da Sessão")
 
     cycles   = data["cycle_metrics"]
     duration = data["session_duration"]
     avg_s    = cycles.get("avg_s")
+    count    = cycles.get("count", 0)
+    in_order     = cycles.get("count_in_order", 0)
+    out_of_order = cycles.get("count_out_of_order", 0)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Ciclos completos",    cycles.get("count", 0))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Ciclos completos",     count)
     c2.metric("Tempo médio de ciclo", _fmt_seconds(avg_s) if avg_s else "—")
-    c3.metric("Duração da sessão",   _fmt_seconds(duration))
+    c3.metric("Ordem correta",        f"{in_order} / {count}")
+    c4.metric("Duração da sessão",    _fmt_seconds(duration))
 
 
 def _render_time_breakdown(data: dict) -> None:

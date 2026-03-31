@@ -61,9 +61,11 @@ class DashboardWriter(OutputInterface):
         if metrics.count() == 0:
             return {"count": 0}
         return {
-            "count":     metrics.count(),
-            "min_s":     round(metrics.minimum().total_seconds(), 3),
-            "avg_s":     round(metrics.average().total_seconds(), 3),
-            "max_s":     round(metrics.maximum().total_seconds(), 3),
-            "std_dev_s": round(metrics.std_deviation().total_seconds(), 3),
+            "count":            metrics.count(),
+            "min_s":            round(metrics.minimum().total_seconds(), 3),
+            "avg_s":            round(metrics.average().total_seconds(), 3),
+            "max_s":            round(metrics.maximum().total_seconds(), 3),
+            "std_dev_s":        round(metrics.std_deviation().total_seconds(), 3),
+            "count_in_order":   metrics.count_in_order(),
+            "count_out_of_order": metrics.count_out_of_order(),
         }

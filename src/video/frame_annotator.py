@@ -1,3 +1,8 @@
+"""Funções de desenho sobre frames OpenCV (esqueleto, ROIs, FPS).
+
+Todas as funções recebem um frame BGR e desenham diretamente nele (in-place).
+Não guardam estado — podem ser chamadas em qualquer ordem e a qualquer momento.
+"""
 from __future__ import annotations
 
 import cv2

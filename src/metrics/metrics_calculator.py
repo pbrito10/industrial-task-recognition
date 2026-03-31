@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from src.metrics.cycle_metrics import CycleMetrics
 from src.metrics.task_metrics import TaskMetrics
 from src.output.metrics_snapshot import MetricsSnapshot
+from src.tracking.cycle_result import CycleResult
 from src.tracking.task_event import TaskEvent
 
 
@@ -43,9 +44,9 @@ class MetricsCalculator:
 
         self._task_metrics[event.zone_name].add(event.duration)
 
-    def record_cycle(self, duration: timedelta) -> None:
-        """Regista a duração de um ciclo completo (chamado pelo CycleTracker)."""
-        self._cycle_metrics.add(duration)
+    def record_cycle(self, cycle_result: CycleResult) -> None:
+        """Regista a duração e a verificação de ordem de um ciclo completo."""
+        self._cycle_metrics.add(cycle_result.duration, cycle_result.order_ok)
 
     def snapshot(self) -> MetricsSnapshot:
         """Devolve um snapshot imutável do estado atual das métricas."""

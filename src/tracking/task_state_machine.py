@@ -71,6 +71,7 @@ class OneHandStateMachine(StateMachineInterface):
         return None
 
     def _handle_idle(self, classified_hands: list[ClassifiedHand]) -> None:
+        """Aguarda que uma mão entre numa zona; ao entrar, avança para DWELLING."""
         for detection, zone in classified_hands:
             if zone is None:
                 continue
@@ -78,20 +79,21 @@ class OneHandStateMachine(StateMachineInterface):
             self._prev_detection = None
             self._dwell_start    = None
             self._task_state     = TaskState.DWELLING
-            return None
-        return None
+            return
+        return
 
     def _handle_dwelling(
         self,
         classified_hands: list[ClassifiedHand],
         frame_time: datetime,
     ) -> None:
+        """Corre o dwell timer; avança para TASK_IN_PROGRESS quando expirar."""
         hand = self._hand_in_tracked_zone(classified_hands)
 
         if hand is None:
             # Saiu antes do dwell — descarta sem emitir evento
             self._reset_to_idle()
-            return None
+            return
 
         if self._strategy.is_active(hand, self._prev_detection):
             if self._dwell_start is None:
@@ -104,13 +106,13 @@ class OneHandStateMachine(StateMachineInterface):
             self._dwell_start = None
 
         self._prev_detection = hand
-        return None
 
     def _handle_in_progress(
         self,
         classified_hands: list[ClassifiedHand],
         frame_time: datetime,
     ) -> TaskEvent | None:
+        """Fecha a tarefa quando a mão sai ou o timeout expira."""
         if frame_time - self._task_start >= self._task_timeout:
             return self._complete_task(frame_time, was_forced=True)
 
@@ -123,12 +125,14 @@ class OneHandStateMachine(StateMachineInterface):
         self,
         classified_hands: list[ClassifiedHand],
     ) -> HandDetection | None:
+        """Devolve a deteção da mão que está na zona rastreada, ou None."""
         for detection, zone in classified_hands:
             if zone is not None and zone.name == self._tracked_zone:
                 return detection
         return None
 
     def _complete_task(self, end_time: datetime, was_forced: bool) -> TaskEvent:
+        """Cria o TaskEvent, emite-o e repõe a máquina em IDLE."""
         event = TaskEvent.create(
             zone_name=self._tracked_zone,
             start_time=self._task_start,
@@ -140,6 +144,7 @@ class OneHandStateMachine(StateMachineInterface):
         return event
 
     def _reset_to_idle(self) -> None:
+        """Apaga todo o estado transitório e volta a IDLE."""
         self._task_state     = TaskState.IDLE
         self._tracked_zone   = None
         self._prev_detection = None
@@ -190,6 +195,7 @@ class TwoHandsStateMachine(StateMachineInterface):
         return None
 
     def _handle_idle(self, classified_hands: list[ClassifiedHand]) -> None:
+        """Aguarda a primeira mão entrar na zona; avança para WAITING_SECOND_HAND."""
         for detection, zone in classified_hands:
             if zone is None:
                 continue
@@ -197,33 +203,33 @@ class TwoHandsStateMachine(StateMachineInterface):
             self._prev_detections = {}
             self._dwell_start     = None
             self._task_state      = TaskState.WAITING_SECOND_HAND
-            return None
-        return None
+            return
+        return
 
     def _handle_waiting_second_hand(self, classified_hands: list[ClassifiedHand]) -> None:
+        """Aguarda a segunda mão; avança para DWELLING_TWO_HANDS quando ambas estiverem na zona."""
         hands = self._hands_in_tracked_zone(classified_hands)
 
         if len(hands) == 0:
             self._reset_to_idle()
-            return None
+            return
 
         if len(hands) >= 2:
             self._dwell_start = None
             self._task_state  = TaskState.DWELLING_TWO_HANDS
-
-        return None
 
     def _handle_dwelling_two_hands(
         self,
         classified_hands: list[ClassifiedHand],
         frame_time: datetime,
     ) -> None:
+        """Corre o dwell timer com ambas as mãos paradas; avança para TASK_IN_PROGRESS."""
         hands = self._hands_in_tracked_zone(classified_hands)
 
         if len(hands) < 2:
             # Uma mão saiu — reinicia completamente
             self._reset_to_idle()
-            return None
+            return
 
         # Ambas as mãos devem estar paradas para avançar o timer
         both_still = all(
@@ -243,13 +249,12 @@ class TwoHandsStateMachine(StateMachineInterface):
         for hand in hands:
             self._prev_detections[hand.hand_side] = hand
 
-        return None
-
     def _handle_in_progress(
         self,
         classified_hands: list[ClassifiedHand],
         frame_time: datetime,
     ) -> TaskEvent | None:
+        """Fecha a tarefa quando qualquer mão sai ou o timeout expira."""
         if frame_time - self._task_start >= self._task_timeout:
             return self._complete_task(frame_time, was_forced=True)
 
@@ -262,12 +267,14 @@ class TwoHandsStateMachine(StateMachineInterface):
         self,
         classified_hands: list[ClassifiedHand],
     ) -> list[HandDetection]:
+        """Devolve as deteções de mãos presentes na zona rastreada."""
         return [
             detection for detection, zone in classified_hands
             if zone is not None and zone.name == self._tracked_zone
         ]
 
     def _complete_task(self, end_time: datetime, was_forced: bool) -> TaskEvent:
+        """Cria o TaskEvent, emite-o e repõe a máquina em IDLE."""
         event = TaskEvent.create(
             zone_name=self._tracked_zone,
             start_time=self._task_start,
@@ -279,6 +286,7 @@ class TwoHandsStateMachine(StateMachineInterface):
         return event
 
     def _reset_to_idle(self) -> None:
+        """Apaga todo o estado transitório e volta a IDLE."""
         self._task_state      = TaskState.IDLE
         self._tracked_zone    = None
         self._prev_detections = {}
@@ -333,6 +341,7 @@ class TaskStateMachine:
         return None
 
     def current_state(self) -> TaskState:
+        """Estado atual do orquestrador (IDLE se nenhuma máquina estiver ativa)."""
         if self._active is None:
             return TaskState.IDLE
         return self._active.state()

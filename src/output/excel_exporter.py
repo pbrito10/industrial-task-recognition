@@ -8,6 +8,7 @@ from openpyxl.styles import Font, PatternFill
 
 from src.output.metrics_snapshot import MetricsSnapshot
 from src.output.output_interface import OutputInterface
+from src.tracking.cycle_result import CycleResult
 from src.tracking.task_event import TaskEvent
 
 # Cor de destaque para a zona gargalo (amarelo-âmbar)
@@ -25,15 +26,20 @@ class ExcelExporter(OutputInterface):
     """
 
     def __init__(self, output_dir: Path, session_start: datetime) -> None:
-        self._output_dir   = output_dir
+        self._output_dir    = output_dir
         self._session_start = session_start
-        self._events: list[TaskEvent] = []
+        self._events:       list[TaskEvent]  = []
+        self._cycle_order:  dict[int, bool]  = {}  # cycle_number → order_ok
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
     def add_event(self, event: TaskEvent) -> None:
         """Acumula TaskEvents durante a sessão para exportar no fim."""
         self._events.append(event)
+
+    def add_cycle_result(self, cycle_result: CycleResult) -> None:
+        """Regista se o ciclo foi concluído na ordem correta."""
+        self._cycle_order[cycle_result.cycle_number] = cycle_result.order_ok
 
     def write(self, snapshot: MetricsSnapshot) -> None:
         """Gera o ficheiro Excel com todas as folhas."""
@@ -93,11 +99,13 @@ class ExcelExporter(OutputInterface):
 
         rows = []
         for cycle_number, events in sorted(cycles.items()):
+            order_ok = self._cycle_order.get(cycle_number, None)
             rows.append({
-                "Nº Ciclo":      cycle_number,
-                "Início":        min(e.start_time for e in events).strftime("%H:%M:%S"),
-                "Fim":           max(e.end_time   for e in events).strftime("%H:%M:%S"),
-                "Duração (s)":   round((max(e.end_time for e in events) - min(e.start_time for e in events)).total_seconds(), 2),
+                "Nº Ciclo":       cycle_number,
+                "Início":         min(e.start_time for e in events).strftime("%H:%M:%S"),
+                "Fim":            max(e.end_time   for e in events).strftime("%H:%M:%S"),
+                "Duração (s)":    round((max(e.end_time for e in events) - min(e.start_time for e in events)).total_seconds(), 2),
+                "Ordem Correta":  "Sim" if order_ok else ("Não" if order_ok is False else "—"),
             })
 
         df = pd.DataFrame(rows)

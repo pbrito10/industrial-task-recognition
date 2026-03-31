@@ -186,6 +186,7 @@ def correr_programa(config):
     app_path       = Path(__file__).parent / "dashboard" / "app.py"
     dashboard_proc = subprocess.Popen(
         [sys.executable, "-m", "streamlit", "run", str(app_path)],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
