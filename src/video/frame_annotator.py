@@ -27,6 +27,12 @@ _HAND_CONNECTIONS = [
     (5, 9), (9, 13), (13, 17),             # Palma
 ]
 
+# A câmera está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
+_FLIPPED_SIDE: dict[HandSide, HandSide] = {
+    HandSide.LEFT:  HandSide.RIGHT,
+    HandSide.RIGHT: HandSide.LEFT,
+}
+
 _HAND_COLORS: dict[HandSide, tuple[int, int, int]] = {
     HandSide.LEFT:  (255, 100, 0),
     HandSide.RIGHT: (0, 200, 50),
@@ -39,12 +45,6 @@ _ZONE_COLOR_EXIT     = (255, 100, 0)
 _ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
     "Montagem": _ZONE_COLOR_ASSEMBLY,
     "Saida":    _ZONE_COLOR_EXIT,
-}
-
-# A câmera está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
-_FLIPPED_SIDE: dict[HandSide, HandSide] = {
-    HandSide.LEFT:  HandSide.RIGHT,
-    HandSide.RIGHT: HandSide.LEFT,
 }
 
 
@@ -109,7 +109,7 @@ def draw_roi(
         thickness = _LINE_THICKNESS + 1
     cv2.rectangle(frame, tl, br, color, thickness)
 
-    cv2.putText(frame, roi.name, (tl[0] + 5, tl[1] + 20), _FONT, 0.6, color, 2)
+    cv2.putText(frame, roi.name, (tl[0] + 5, tl[1] + 20), _FONT, 0.6, (0, 0, 0), 2)
 
 
 def draw_rois(

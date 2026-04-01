@@ -1,4 +1,4 @@
-# Câmera → frame_queue (RGB, espelho horizontal)
+# Câmera → frame_queue (RGB, espelho horizontal e vertical)
 #
 # OpenCV captura em BGR; convertemos para RGB aqui, uma vez, para não forçar
 # o detector a fazer esse trabalho em cada frame.
@@ -29,7 +29,7 @@ def run(frame_queue, stop_event, config):
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_rgb = cv2.flip(frame_rgb, 1)
+            frame_rgb = cv2.flip(frame_rgb, -1)
 
             if frame_queue.full():
                 try:

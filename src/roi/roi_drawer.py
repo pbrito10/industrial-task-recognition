@@ -259,7 +259,7 @@ class RoiDrawer:
             if frame is None:
                 return None
 
-            frame = cv2.flip(frame, 1)
+            frame = cv2.flip(frame, -1)
             session.render(frame)
 
             cv2.imshow(_WINDOW_NAME, frame)
