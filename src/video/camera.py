@@ -16,6 +16,8 @@ class Camera:
         # Configurar resolução pedida — a câmera pode não suportar e ajusta automaticamente
         self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        # Desativar autofoco — evita que a câmera perca o foco quando as mãos saem da cena
+        self._capture.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 
     def read_frame(self) -> np.ndarray | None:
         """Lê o próximo frame. Devolve None se a câmera falhou ou terminou."""
