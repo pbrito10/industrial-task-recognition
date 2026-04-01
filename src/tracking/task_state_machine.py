@@ -343,11 +343,17 @@ class TaskStateMachine:
                 self._active = self._two_hands
                 return self._active.update(classified_hands, frame_time)
 
-        # Zona de uma mão: primeira mão em qualquer zona não-two-hands
-        for _, zone in classified_hands:
-            if zone is not None and zone.name not in self._two_hands_zones:
+        # Zona de uma mão: filtra zonas two-hands para que _handle_idle não as possa
+        # seleccionar acidentalmente como zona rastreada (ex: mão em repouso em Montagem
+        # enquanto a outra mão trabalha em Porca — sem filtro, one_hand rastrearia Montagem)
+        filtered = [
+            (d, z) for d, z in classified_hands
+            if z is None or z.name not in self._two_hands_zones
+        ]
+        for _, zone in filtered:
+            if zone is not None:
                 self._active = self._one_hand
-                return self._active.update(classified_hands, frame_time)
+                return self._active.update(filtered, frame_time)
 
         return None
 
