@@ -41,6 +41,7 @@ tracking:
     - "Parafuso"
     - "Montagem"
     - "Saida"
+  start_zone: "Porca"    # zona que inicia o ciclo (tarefas antes são descartadas)
   exit_zone: "Saida"     # zona cuja conclusão fecha o ciclo
 
 dashboard:

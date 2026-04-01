@@ -16,6 +16,7 @@ class WorkbenchConfig:
     zones:            list[str]
     two_hands_zones:  list[str]
     cycle_zone_order: list[str]
+    start_zone:       str
     exit_zone:        str
 
     @classmethod
@@ -26,6 +27,7 @@ class WorkbenchConfig:
                 zones=data["zones"],
                 two_hands_zones=data["two_hands_zones"],
                 cycle_zone_order=data["cycle_zone_order"],
+                start_zone=data["start_zone"],
                 exit_zone=data["exit_zone"],
             )
 
@@ -38,6 +40,7 @@ class WorkbenchConfig:
             zones=tracking["zones"],
             two_hands_zones=tracking.get("two_hands_zones", []),
             cycle_zone_order=tracking.get("cycle_zone_order", []),
+            start_zone=tracking.get("start_zone", ""),
             exit_zone=tracking.get("exit_zone", ""),
         )
 
@@ -47,6 +50,7 @@ class WorkbenchConfig:
             "zones":            self.zones,
             "two_hands_zones":  self.two_hands_zones,
             "cycle_zone_order": self.cycle_zone_order,
+            "start_zone":       self.start_zone,
             "exit_zone":        self.exit_zone,
         }
         workbench_path.write_text(

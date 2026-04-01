@@ -51,6 +51,7 @@ class _MonitorSession:
         self._refresh_interval = timedelta(seconds=config["dashboard"]["refresh_seconds"])
 
         self._cycle_tracker    = CycleTracker(
+            start_zone=workbench.start_zone,
             exit_zone=workbench.exit_zone,
             expected_order=workbench.cycle_zone_order,
         )

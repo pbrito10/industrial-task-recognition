@@ -36,9 +36,10 @@ class SetupWizard:
         rois            = self._step_draw_rois(zones)
         two_hands_zones = self._step_two_hands(zones, current.two_hands_zones)
         cycle_order     = self._step_sequence(zones, current.cycle_zone_order)
+        start_zone      = self._step_start_zone(zones, current.start_zone)
         exit_zone       = self._step_exit_zone(zones, current.exit_zone)
 
-        WorkbenchConfig(zones, two_hands_zones, cycle_order, exit_zone).save(self._workbench_path)
+        WorkbenchConfig(zones, two_hands_zones, cycle_order, start_zone, exit_zone).save(self._workbench_path)
 
         if rois is not None:
             from src.roi.json_roi_repository import JsonRoiRepository
@@ -99,7 +100,7 @@ class SetupWizard:
         from src.roi.roi_drawer import RoiDrawer
         from src.video.camera import Camera
 
-        print("\nPasso 2/5 — Desenhar ROIs")
+        print("\nPasso 2/6 — Desenhar ROIs")
         print("  Abre o editor visual. 's' para guardar, 'q' para sair sem guardar.")
         input("  Pressiona Enter para abrir a câmara...")
 
@@ -124,7 +125,7 @@ class SetupWizard:
 
     def _step_two_hands(self, zones: list[str], current: list[str]) -> list[str]:
         selected = set(current) & set(zones)  # descarta zonas que já não existem
-        print("\nPasso 3/5 — Zonas com duas mãos")
+        print("\nPasso 3/6 — Zonas com duas mãos")
         print("  Digita o número para activar/desactivar. Enter para continuar.\n")
 
         while True:
@@ -153,7 +154,7 @@ class SetupWizard:
     def _step_sequence(self, zones: list[str], current: list[str]) -> list[str]:
         # Remove zonas que já não existem mas mantém repetições válidas
         sequence = [z for z in current if z in zones]
-        print("\nPasso 4/5 — Sequência do ciclo")
+        print("\nPasso 4/6 — Sequência do ciclo")
         print("  [número] adicionar zona   [x] remover última   [Enter] continuar\n")
 
         while True:
@@ -180,26 +181,49 @@ class SetupWizard:
         return sequence
 
     # ------------------------------------------------------------------
-    # Passo 5 — Zona de saída
+    # Passo 5 — Zona de início
+    # ------------------------------------------------------------------
+
+    def _step_start_zone(self, zones: list[str], current: str) -> str:
+        current_valid = current if current in zones else ""
+        print("\nPasso 5/6 — Zona de início")
+        print("  Escolhe a zona que inicia o ciclo.")
+        print("  Tarefas antes desta zona são descartadas. Enter para manter a actual.\n")
+
+        return self._pick_zone(zones, current_valid)
+
+    # ------------------------------------------------------------------
+    # Passo 6 — Zona de saída
     # ------------------------------------------------------------------
 
     def _step_exit_zone(self, zones: list[str], current: str) -> str:
-        # Se a zona de saída actual já não existe, limpa
         current_valid = current if current in zones else ""
-        print("\nPasso 5/5 — Zona de saída")
+        print("\nPasso 6/6 — Zona de saída")
         print("  Escolhe a zona que fecha o ciclo. Enter para manter a actual.\n")
 
+        return self._pick_zone(zones, current_valid, required_msg="É necessário escolher uma zona de saída.")
+
+    # ------------------------------------------------------------------
+    # Utilitário partilhado — escolher uma zona da lista
+    # ------------------------------------------------------------------
+
+    def _pick_zone(
+        self,
+        zones: list[str],
+        current: str,
+        required_msg: str = "É necessário escolher uma zona.",
+    ) -> str:
         while True:
             for i, name in enumerate(zones, 1):
-                marker = " (actual)" if name == current_valid else ""
+                marker = " (actual)" if name == current else ""
                 print(f"  {i}. {name}{marker}")
 
             raw = input("\n  > ").strip()
 
             if raw == "":
-                if current_valid:
-                    return current_valid
-                print("  É necessário escolher uma zona de saída.")
+                if current:
+                    return current
+                print(f"  {required_msg}")
                 continue
 
             idx = self._parse_index(raw, zones)

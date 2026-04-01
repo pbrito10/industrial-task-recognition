@@ -40,6 +40,11 @@ def _matches_order(actual: list[str], expected: list[str]) -> bool:
 class CycleTracker:
     """Deteta ciclos completos acumulando TaskEvents até à zona de saída.
 
+    O ciclo só começa quando o operador visita a zona de início — qualquer
+    tarefa antes disso é descartada. Isto evita que tarefas acidentais no
+    início da sessão (ex: ir a Montagem antes de ir buscar a Porca) entrem
+    no ciclo e invalidem a sequência.
+
     Um ciclo só fecha quando a zona de saída é concluída normalmente
     (was_forced=False). Timeouts acumulam-se no ciclo mas não o fecham —
     uma interrupção não é uma saída real.
@@ -48,14 +53,23 @@ class CycleTracker:
     porque representam tempo de espera, não passos de montagem.
     """
 
-    def __init__(self, exit_zone: str, expected_order: list[str]) -> None:
+    def __init__(self, start_zone: str, exit_zone: str, expected_order: list[str]) -> None:
+        self._start_zone:       str             = start_zone
         self._exit_zone:        str             = exit_zone
         self._expected_order:   list[str]       = expected_order
         self._tasks_in_cycle:   list[TaskEvent] = []
         self._completed_cycles: int             = 0
+        self._cycle_started:    bool            = False
 
     def record(self, event: TaskEvent) -> CycleResult | None:
         """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
+        if not self._cycle_started:
+            if event.zone_name == self._start_zone and not event.was_forced:
+                self._cycle_started = True
+            else:
+                # Tarefa antes da zona de início — descarta
+                return None
+
         self._tasks_in_cycle.append(event)
 
         if self._is_cycle_complete(event):
@@ -78,6 +92,7 @@ class CycleTracker:
 
         self._tasks_in_cycle    = []
         self._completed_cycles += 1
+        self._cycle_started     = False  # aguarda nova zona de início
 
         return CycleResult(
             duration=duration,
