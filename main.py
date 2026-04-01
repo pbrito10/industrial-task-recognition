@@ -19,10 +19,9 @@ from pathlib import Path
 
 import yaml
 
-_CONFIG_PATH      = Path(__file__).parent / "config" / "settings.yaml"
-_ROI_PATH         = Path(__file__).parent / "config" / "rois.json"
-_WORKBENCHES_DIR  = Path(__file__).parent / "config" / "workbenches"
-_ACTIVE_PATH      = Path(__file__).parent / "config" / "active_workbench.txt"
+_CONFIG_PATH     = Path(__file__).parent / "config" / "settings.yaml"
+_WORKBENCHES_DIR = Path(__file__).parent / "config" / "workbenches"
+_ACTIVE_PATH     = Path(__file__).parent / "config" / "active_workbench.txt"
 
 
 def run_camera(frame_queue, stop_event, config):
@@ -40,9 +39,9 @@ def run_display(detection_queue, stop_event):
     display_process.run(detection_queue, stop_event)
 
 
-def run_pipeline(detection_queue, stop_event, config, roi_path, workbenches_dir, active_path):
+def run_pipeline(detection_queue, stop_event, config, workbenches_dir, active_path):
     import monitor_process
-    monitor_process.run(detection_queue, stop_event, config, roi_path, workbenches_dir, active_path)
+    monitor_process.run(detection_queue, stop_event, config, workbenches_dir, active_path)
 
 
 def _start_processes(processos: dict) -> None:
@@ -106,11 +105,13 @@ def correr_programa(config):
 
     from src.wizard.workbench_config import WorkbenchConfig
 
-    if WorkbenchConfig.active_name(_ACTIVE_PATH) is None:
+    active_name = WorkbenchConfig.active_name(_ACTIVE_PATH)
+    if active_name is None:
         print("Bancada não configurada. Usa a opção 3 (Configurar Bancada) primeiro.")
         return
 
-    if not JsonRoiRepository(path=_ROI_PATH).load().all():
+    roi_path = WorkbenchConfig.roi_path(_WORKBENCHES_DIR, active_name)
+    if not JsonRoiRepository(path=roi_path).load().all():
         print("Nenhuma ROI definida. Usa a opção 3 (Configurar Bancada) primeiro.")
         return
 
@@ -135,7 +136,7 @@ def correr_programa(config):
                                args=(frame_queue, detection_queue, stop_event, config)),
             pipeline = Process(target=run_pipeline, name="pipeline",
                                args=(detection_queue, stop_event, config,
-                                     str(_ROI_PATH), str(_WORKBENCHES_DIR), str(_ACTIVE_PATH))),
+                                     str(_WORKBENCHES_DIR), str(_ACTIVE_PATH))),
         )
     finally:
         dashboard_proc.terminate()
@@ -148,7 +149,6 @@ def configurar_bancada(config):
     SetupWizard(
         workbenches_dir=_WORKBENCHES_DIR,
         active_path=_ACTIVE_PATH,
-        roi_path=_ROI_PATH,
         camera_config=config["camera"],
     ).run()
 

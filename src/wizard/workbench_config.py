@@ -54,11 +54,22 @@ class WorkbenchConfig:
         return workbenches_dir / f"{name}.json"
 
     @staticmethod
+    def roi_path(workbenches_dir: Path, name: str) -> Path:
+        """Caminho do ficheiro de ROIs associado a este perfil."""
+        return workbenches_dir / f"{name}_rois.json"
+
+    @staticmethod
     def list_profiles(workbenches_dir: Path) -> list[str]:
-        """Devolve os nomes dos perfis existentes, ordenados alfabeticamente."""
+        """Devolve os nomes dos perfis existentes, ordenados alfabeticamente.
+
+        Exclui os ficheiros de ROIs (_rois.json) que vivem na mesma pasta.
+        """
         if not workbenches_dir.exists():
             return []
-        return sorted(p.stem for p in workbenches_dir.glob("*.json"))
+        return sorted(
+            p.stem for p in workbenches_dir.glob("*.json")
+            if not p.stem.endswith("_rois")
+        )
 
     @staticmethod
     def active_name(active_path: Path) -> str | None:

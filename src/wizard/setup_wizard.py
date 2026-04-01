@@ -24,12 +24,10 @@ class SetupWizard:
         self,
         workbenches_dir: Path,
         active_path:     Path,
-        roi_path:        Path,
         camera_config:   dict,
     ) -> None:
         self._workbenches_dir = workbenches_dir
         self._active_path     = active_path
-        self._roi_path        = roi_path
         self._camera_config   = camera_config
 
     # ------------------------------------------------------------------
@@ -100,8 +98,7 @@ class SetupWizard:
             return
 
         path = WorkbenchConfig.profile_path(self._workbenches_dir, name)
-        empty = WorkbenchConfig([], [], [], "", "")
-        config = self._run_steps(empty, path)
+        self._run_steps(WorkbenchConfig([], [], [], "", ""), path, name)
 
         WorkbenchConfig.set_active(name, self._active_path)
         print(f"\n  Perfil '{name}' criado e ativado.")
@@ -113,7 +110,7 @@ class SetupWizard:
 
         path = WorkbenchConfig.profile_path(self._workbenches_dir, active)
         current = WorkbenchConfig.load(path)
-        self._run_steps(current, path)
+        self._run_steps(current, path, active)
         print(f"\n  Perfil '{active}' atualizado.")
 
     def _menu_delete(self, profiles: list[str], active: str | None) -> None:
@@ -142,17 +139,23 @@ class SetupWizard:
             return
 
         WorkbenchConfig.profile_path(self._workbenches_dir, name).unlink()
+        # Apaga também as ROIs associadas, se existirem
+        roi_file = WorkbenchConfig.roi_path(self._workbenches_dir, name)
+        if roi_file.exists():
+            roi_file.unlink()
         print(f"  Perfil '{name}' apagado.")
 
     # ------------------------------------------------------------------
     # Os 6 passos de configuração
     # ------------------------------------------------------------------
 
-    def _run_steps(self, current: WorkbenchConfig, save_path: Path) -> WorkbenchConfig:
+    def _run_steps(self, current: WorkbenchConfig, save_path: Path, profile_name: str) -> WorkbenchConfig:
         print("\nPodes pressionar Enter em qualquer passo para manter o valor atual.")
 
+        roi_path = WorkbenchConfig.roi_path(self._workbenches_dir, profile_name)
+
         zones           = self._step_zones(current.zones)
-        rois            = self._step_draw_rois(zones)
+        rois            = self._step_draw_rois(zones, roi_path)
         two_hands_zones = self._step_two_hands(zones, current.two_hands_zones)
         cycle_order     = self._step_sequence(zones, current.cycle_zone_order)
         start_zone      = self._step_start_zone(zones, current.start_zone)
@@ -163,7 +166,7 @@ class SetupWizard:
 
         if rois is not None:
             from src.roi.json_roi_repository import JsonRoiRepository
-            JsonRoiRepository(path=self._roi_path).save(rois)
+            JsonRoiRepository(path=roi_path).save(rois)
 
         return config
 
@@ -215,7 +218,7 @@ class SetupWizard:
     # Passo 2 — Desenhar ROIs
     # ------------------------------------------------------------------
 
-    def _step_draw_rois(self, zones: list[str]) -> RoiCollection | None:
+    def _step_draw_rois(self, zones: list[str], roi_path: Path) -> RoiCollection | None:
         from src.roi.json_roi_repository import JsonRoiRepository
         from src.roi.roi_drawer import RoiDrawer
         from src.video.camera import Camera
@@ -233,7 +236,7 @@ class SetupWizard:
         result = RoiDrawer(
             camera_factory=camera_factory,
             zone_names=zones,
-        ).draw(JsonRoiRepository(path=self._roi_path).load())
+        ).draw(JsonRoiRepository(path=roi_path).load())
 
         if result is None:
             print("  Saiu sem guardar — ROIs anteriores mantidas.")
