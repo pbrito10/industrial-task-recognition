@@ -8,27 +8,148 @@ from src.wizard.workbench_config import WorkbenchConfig
 
 
 class SetupWizard:
-    """Guia o utilizador pela configuração completa de uma bancada em 5 passos.
+    """Gestão de perfis de bancada e configuração dos 6 passos.
 
-    Os passos 1, 3, 4 e 5 correm no terminal.
-    O passo 2 (ROIs) abre uma janela OpenCV — igual ao modo "Definir ROIs" existente.
+    Menu principal:
+      1. Activar perfil existente
+      2. Criar novo perfil
+      3. Editar perfil activo
+      4. Apagar perfil
+
+    Os 6 passos de configuração correm no terminal, excepto o passo 2
+    (ROIs) que abre uma janela OpenCV.
     """
 
     def __init__(
         self,
-        workbench_path: Path,
-        roi_path:       Path,
-        camera_config:  dict,
+        workbenches_dir: Path,
+        active_path:     Path,
+        roi_path:        Path,
+        camera_config:   dict,
     ) -> None:
-        self._workbench_path = workbench_path
-        self._roi_path       = roi_path
-        self._camera_config  = camera_config
+        self._workbenches_dir = workbenches_dir
+        self._active_path     = active_path
+        self._roi_path        = roi_path
+        self._camera_config   = camera_config
+
+    # ------------------------------------------------------------------
+    # Menu principal
+    # ------------------------------------------------------------------
 
     def run(self) -> None:
-        print("\n=== Configurar Bancada ===")
-        print("Podes pressionar Enter em qualquer passo para manter o valor actual.\n")
+        while True:
+            active = WorkbenchConfig.active_name(self._active_path)
+            profiles = WorkbenchConfig.list_profiles(self._workbenches_dir)
 
-        current = WorkbenchConfig.load(self._workbench_path) if self._workbench_path.exists() else WorkbenchConfig([], [], [], "", "")
+            print("\n=== Configurar Bancada ===")
+            print(f"  Perfil activo: {active or '(nenhum)'}\n")
+            print("  1. Activar perfil existente")
+            print("  2. Criar novo perfil")
+            print("  3. Editar perfil activo")
+            print("  4. Apagar perfil")
+            print("  0. Voltar")
+
+            raw = input("\n  > ").strip()
+
+            if raw == "0":
+                break
+            elif raw == "1":
+                self._menu_activate(profiles, active)
+            elif raw == "2":
+                self._menu_create(profiles)
+            elif raw == "3":
+                self._menu_edit(active)
+            elif raw == "4":
+                self._menu_delete(profiles, active)
+            else:
+                print("  Opção inválida.")
+
+    # ------------------------------------------------------------------
+    # Acções do menu
+    # ------------------------------------------------------------------
+
+    def _menu_activate(self, profiles: list[str], active: str | None) -> None:
+        if not profiles:
+            print("\n  Não existem perfis. Cria um primeiro (opção 2).")
+            return
+
+        print("\n  Perfis disponíveis:")
+        for i, name in enumerate(profiles, 1):
+            marker = " (activo)" if name == active else ""
+            print(f"    {i}. {name}{marker}")
+
+        raw = input("\n  Número do perfil a activar (Enter para cancelar): ").strip()
+        if not raw:
+            return
+
+        idx = self._parse_index(raw, profiles)
+        if idx is None:
+            return
+
+        WorkbenchConfig.set_active(profiles[idx], self._active_path)
+        print(f"\n  Perfil '{profiles[idx]}' activado.")
+
+    def _menu_create(self, profiles: list[str]) -> None:
+        print("\n  Nome do novo perfil (Enter para cancelar): ", end="")
+        name = input().strip()
+        if not name:
+            return
+
+        if name in profiles:
+            print(f"  Já existe um perfil com o nome '{name}'.")
+            return
+
+        path = WorkbenchConfig.profile_path(self._workbenches_dir, name)
+        empty = WorkbenchConfig([], [], [], "", "")
+        config = self._run_steps(empty, path)
+
+        WorkbenchConfig.set_active(name, self._active_path)
+        print(f"\n  Perfil '{name}' criado e activado.")
+
+    def _menu_edit(self, active: str | None) -> None:
+        if active is None:
+            print("\n  Nenhum perfil activo. Activa ou cria um primeiro.")
+            return
+
+        path = WorkbenchConfig.profile_path(self._workbenches_dir, active)
+        current = WorkbenchConfig.load(path)
+        self._run_steps(current, path)
+        print(f"\n  Perfil '{active}' actualizado.")
+
+    def _menu_delete(self, profiles: list[str], active: str | None) -> None:
+        deletable = [p for p in profiles if p != active]
+
+        if not deletable:
+            print("\n  Não há perfis para apagar (não é possível apagar o perfil activo).")
+            return
+
+        print("\n  Perfis que podem ser apagados:")
+        for i, name in enumerate(deletable, 1):
+            print(f"    {i}. {name}")
+
+        raw = input("\n  Número do perfil a apagar (Enter para cancelar): ").strip()
+        if not raw:
+            return
+
+        idx = self._parse_index(raw, deletable)
+        if idx is None:
+            return
+
+        name = deletable[idx]
+        confirm = input(f"  Tens a certeza que queres apagar '{name}'? (s/N): ").strip().lower()
+        if confirm != "s":
+            print("  Cancelado.")
+            return
+
+        WorkbenchConfig.profile_path(self._workbenches_dir, name).unlink()
+        print(f"  Perfil '{name}' apagado.")
+
+    # ------------------------------------------------------------------
+    # Os 6 passos de configuração
+    # ------------------------------------------------------------------
+
+    def _run_steps(self, current: WorkbenchConfig, save_path: Path) -> WorkbenchConfig:
+        print("\nPodes pressionar Enter em qualquer passo para manter o valor actual.")
 
         zones           = self._step_zones(current.zones)
         rois            = self._step_draw_rois(zones)
@@ -37,13 +158,14 @@ class SetupWizard:
         start_zone      = self._step_start_zone(zones, current.start_zone)
         exit_zone       = self._step_exit_zone(zones, current.exit_zone)
 
-        WorkbenchConfig(zones, two_hands_zones, cycle_order, start_zone, exit_zone).save(self._workbench_path)
+        config = WorkbenchConfig(zones, two_hands_zones, cycle_order, start_zone, exit_zone)
+        config.save(save_path)
 
         if rois is not None:
             from src.roi.json_roi_repository import JsonRoiRepository
             JsonRoiRepository(path=self._roi_path).save(rois)
 
-        print("\nConfiguração guardada.")
+        return config
 
     # ------------------------------------------------------------------
     # Passo 1 — Zonas
@@ -51,7 +173,7 @@ class SetupWizard:
 
     def _step_zones(self, current: list[str]) -> list[str]:
         zones = list(current)
-        print("Passo 1/5 — Zonas")
+        print("\nPasso 1/6 — Zonas")
         self._print_zones(zones)
         print("  [a <nome>] adicionar   [r <número>] remover   [Enter] continuar\n")
 
@@ -122,7 +244,7 @@ class SetupWizard:
     # ------------------------------------------------------------------
 
     def _step_two_hands(self, zones: list[str], current: list[str]) -> list[str]:
-        selected = set(current) & set(zones)  # descarta zonas que já não existem
+        selected = set(current) & set(zones)
         print("\nPasso 3/6 — Zonas com duas mãos")
         print("  Digita o número para activar/desactivar. Enter para continuar.\n")
 
@@ -150,7 +272,6 @@ class SetupWizard:
     # ------------------------------------------------------------------
 
     def _step_sequence(self, zones: list[str], current: list[str]) -> list[str]:
-        # Remove zonas que já não existem mas mantém repetições válidas
         sequence = [z for z in current if z in zones]
         print("\nPasso 4/6 — Sequência do ciclo")
         print("  [número] adicionar zona   [x] remover última   [Enter] continuar\n")
@@ -187,7 +308,6 @@ class SetupWizard:
         print("\nPasso 5/6 — Zona de início")
         print("  Escolhe a zona que inicia o ciclo.")
         print("  Tarefas antes desta zona são descartadas. Enter para manter a actual.\n")
-
         return self._pick_zone(zones, current_valid)
 
     # ------------------------------------------------------------------
@@ -198,7 +318,6 @@ class SetupWizard:
         current_valid = current if current in zones else ""
         print("\nPasso 6/6 — Zona de saída")
         print("  Escolhe a zona que fecha o ciclo. Enter para manter a actual.\n")
-
         return self._pick_zone(zones, current_valid, required_msg="É necessário escolher uma zona de saída.")
 
     # ------------------------------------------------------------------

@@ -19,9 +19,10 @@ from pathlib import Path
 
 import yaml
 
-_CONFIG_PATH    = Path(__file__).parent / "config" / "settings.yaml"
-_ROI_PATH       = Path(__file__).parent / "config" / "rois.json"
-_WORKBENCH_PATH = Path(__file__).parent / "config" / "workbench.json"
+_CONFIG_PATH      = Path(__file__).parent / "config" / "settings.yaml"
+_ROI_PATH         = Path(__file__).parent / "config" / "rois.json"
+_WORKBENCHES_DIR  = Path(__file__).parent / "config" / "workbenches"
+_ACTIVE_PATH      = Path(__file__).parent / "config" / "active_workbench.txt"
 
 
 def run_camera(frame_queue, stop_event, config):
@@ -39,9 +40,9 @@ def run_display(detection_queue, stop_event):
     display_process.run(detection_queue, stop_event)
 
 
-def run_pipeline(detection_queue, stop_event, config, roi_path, workbench_path):
+def run_pipeline(detection_queue, stop_event, config, roi_path, workbenches_dir, active_path):
     import monitor_process
-    monitor_process.run(detection_queue, stop_event, config, roi_path, workbench_path)
+    monitor_process.run(detection_queue, stop_event, config, roi_path, workbenches_dir, active_path)
 
 
 def _start_processes(processos: dict) -> None:
@@ -103,7 +104,9 @@ def correr_programa(config):
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
-    if not _WORKBENCH_PATH.exists():
+    from src.wizard.workbench_config import WorkbenchConfig
+
+    if WorkbenchConfig.active_name(_ACTIVE_PATH) is None:
         print("Bancada não configurada. Usa a opção 3 (Configurar Bancada) primeiro.")
         return
 
@@ -132,7 +135,7 @@ def correr_programa(config):
                                args=(frame_queue, detection_queue, stop_event, config)),
             pipeline = Process(target=run_pipeline, name="pipeline",
                                args=(detection_queue, stop_event, config,
-                                     str(_ROI_PATH), str(_WORKBENCH_PATH))),
+                                     str(_ROI_PATH), str(_WORKBENCHES_DIR), str(_ACTIVE_PATH))),
         )
     finally:
         dashboard_proc.terminate()
@@ -143,7 +146,8 @@ def configurar_bancada(config):
     from src.wizard.setup_wizard import SetupWizard
 
     SetupWizard(
-        workbench_path=_WORKBENCH_PATH,
+        workbenches_dir=_WORKBENCHES_DIR,
+        active_path=_ACTIVE_PATH,
         roi_path=_ROI_PATH,
         camera_config=config["camera"],
     ).run()

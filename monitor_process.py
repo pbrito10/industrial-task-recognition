@@ -6,8 +6,8 @@
 # (OpenCV, MediaPipe) no processo pai sem necessidade.
 
 
-def run(detection_queue, stop_event, config, roi_path, workbench_path):
-    _MonitorSession(config, roi_path, workbench_path).execute(detection_queue, stop_event)
+def run(detection_queue, stop_event, config, roi_path, workbenches_dir, active_path):
+    _MonitorSession(config, roi_path, workbenches_dir, active_path).execute(detection_queue, stop_event)
 
 
 class _MonitorSession:
@@ -17,7 +17,7 @@ class _MonitorSession:
     limpo e cada peça pode ser testada isoladamente.
     """
 
-    def __init__(self, config: dict, roi_path: str, workbench_path: str) -> None:
+    def __init__(self, config: dict, roi_path: str, workbenches_dir: str, active_path: str) -> None:
         from datetime import datetime, timedelta
         from pathlib import Path
 
@@ -39,7 +39,7 @@ class _MonitorSession:
         self._last_dashboard_write  = datetime.min
         self._last_detection_per_zone: dict = {}
 
-        workbench = WorkbenchConfig.load(Path(workbench_path))
+        workbench = WorkbenchConfig.load_active(Path(workbenches_dir), Path(active_path))
 
         rois                  = JsonRoiRepository(path=Path(roi_path)).load()
         self._rois            = rois
