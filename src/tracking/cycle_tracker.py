@@ -61,21 +61,25 @@ class CycleTracker:
         self._completed_cycles: int             = 0
         self._cycle_started:    bool            = False
 
-    def record(self, event: TaskEvent) -> CycleResult | None:
-        """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
+    def record(self, event: TaskEvent) -> tuple[bool, CycleResult | None]:
+        """Acumula o evento. Devolve (aceite, CycleResult | None).
+
+        aceite=False → tarefa descartada (antes da zona de início).
+        aceite=True  → tarefa registada; CycleResult preenchido se o ciclo fechou.
+        """
         if not self._cycle_started:
             if event.zone_name == self._start_zone and not event.was_forced:
                 self._cycle_started = True
             else:
-                # Tarefa antes da zona de início — descarta
-                return None
+                # Tarefa antes da zona de início — descarta sem registar métricas
+                return False, None
 
         self._tasks_in_cycle.append(event)
 
         if self._is_cycle_complete(event):
-            return self._close_cycle()
+            return True, self._close_cycle()
 
-        return None
+        return True, None
 
     def current_cycle_number(self) -> int:
         """Número do ciclo em curso (começa em 1)."""

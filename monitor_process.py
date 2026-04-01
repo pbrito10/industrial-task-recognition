@@ -161,7 +161,10 @@ class _MonitorSession:
     def _handle_task_event(self, task_event, debug_logger) -> None:
         self._log_task(task_event, debug_logger)
 
-        cycle_result = self._cycle_tracker.record(task_event)
+        accepted, cycle_result = self._cycle_tracker.record(task_event)
+        if not accepted:
+            return
+
         self._metrics.record(task_event)
         self._excel_exporter.add_event(task_event)
 
