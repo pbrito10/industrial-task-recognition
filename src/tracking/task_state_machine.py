@@ -322,11 +322,32 @@ class TaskStateMachine:
                 self._active = None
             return event
 
+        return self._activate_best_zone(classified_hands, frame_time)
+
+    def _activate_best_zone(
+        self,
+        classified_hands: list[ClassifiedHand],
+        frame_time: datetime,
+    ) -> TaskEvent | None:
+        # Conta quantas mãos estão em cada zona neste frame
+        hands_per_zone: dict[str, int] = {}
         for _, zone in classified_hands:
-            if zone is None:
-                continue
-            self._active = self._machine_for(zone.name)
-            return self._active.update(classified_hands, frame_time)
+            if zone is not None:
+                hands_per_zone[zone.name] = hands_per_zone.get(zone.name, 0) + 1
+
+        # Zonas two-hands só são activadas quando ambas as mãos já estão presentes.
+        # Activar com uma mão deixaria a máquina em WAITING_SECOND_HAND e bloquearia
+        # a detecção de qualquer outra zona de uma mão enquanto o operador trabalha.
+        for zone_name, count in hands_per_zone.items():
+            if zone_name in self._two_hands_zones and count >= 2:
+                self._active = self._two_hands
+                return self._active.update(classified_hands, frame_time)
+
+        # Zona de uma mão: primeira mão em qualquer zona não-two-hands
+        for _, zone in classified_hands:
+            if zone is not None and zone.name not in self._two_hands_zones:
+                self._active = self._one_hand
+                return self._active.update(classified_hands, frame_time)
 
         return None
 
