@@ -109,18 +109,15 @@ def _render_zone_table_styled(df: pd.DataFrame, bottleneck: str | None) -> None:
 
 
 def _render_zone_tables(data: dict) -> None:
-    """Secção 3 — Três tabelas: ciclo atual, ciclos corretos, ciclos fora de ordem."""
+    """Secção 3 — Três tabelas lado a lado: ciclo atual, ciclos corretos, fora de ordem."""
     st.subheader("Métricas por Zona")
 
     bottleneck = data.get("bottleneck_zone")
 
-    tab_current, tab_correct, tab_incorrect = st.tabs([
-        "Ciclo atual",
-        "Ciclos em ordem",
-        "Ciclos fora de ordem",
-    ])
+    col_current, col_correct, col_incorrect = st.columns(3)
 
-    with tab_current:
+    with col_current:
+        st.caption("Ciclo atual")
         task = data.get("current_cycle_metrics", {})
         if not task:
             st.info("Nenhuma tarefa no ciclo em curso.")
@@ -128,7 +125,8 @@ def _render_zone_tables(data: dict) -> None:
             df = _build_zone_df(task)
             _render_zone_table_styled(df, bottleneck=None)
 
-    with tab_correct:
+    with col_correct:
+        st.caption("Ciclos em ordem")
         task = data.get("correct_cycle_metrics", {})
         if not task:
             st.info("Ainda sem ciclos com ordem correta.")
@@ -136,9 +134,10 @@ def _render_zone_tables(data: dict) -> None:
             df = _build_zone_df(task)
             _render_zone_table_styled(df, bottleneck)
             if bottleneck:
-                st.caption(f"Gargalo: {bottleneck} (maior tempo médio)")
+                st.caption(f"Gargalo: {bottleneck}")
 
-    with tab_incorrect:
+    with col_incorrect:
+        st.caption("Ciclos fora de ordem")
         task = data.get("incorrect_cycle_metrics", {})
         if not task:
             st.info("Ainda sem ciclos fora de ordem.")
