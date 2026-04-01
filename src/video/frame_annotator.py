@@ -41,7 +41,7 @@ _ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
     "Saida":    _ZONE_COLOR_EXIT,
 }
 
-# A câmara está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
+# A câmera está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
 _FLIPPED_SIDE: dict[HandSide, HandSide] = {
     HandSide.LEFT:  HandSide.RIGHT,
     HandSide.RIGHT: HandSide.LEFT,

@@ -1,7 +1,7 @@
 # detection_queue → janela OpenCV com esqueleto das mãos e FPS
 #
-# Usado apenas no modo "Testar Câmara" — não há state machine nem métricas.
-# O frame chega em RGB (convertido na câmara); o imshow espera BGR.
+# Usado apenas no modo "Testar Câmera" — não há state machine nem métricas.
+# O frame chega em RGB (convertido na câmera); o imshow espera BGR.
 
 
 def run(detection_queue, stop_event):
@@ -12,7 +12,7 @@ def run(detection_queue, stop_event):
 
     from src.video import frame_annotator
 
-    window_name = "Teste de Câmara  |  q para sair"
+    window_name = "Teste de Câmera  |  q para sair"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     prev_time = time.perf_counter()
 

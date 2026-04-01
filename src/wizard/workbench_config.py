@@ -10,7 +10,7 @@ class WorkbenchConfig:
     """Configuração de uma bancada de montagem: zonas, sequência e regras.
 
     Cada perfil é guardado em config/workbenches/<nome>.json.
-    O perfil activo é indicado por config/active_workbench.txt.
+    O perfil ativo é indicado por config/active_workbench.txt.
     """
 
     zones:            list[str]
@@ -46,7 +46,7 @@ class WorkbenchConfig:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ------------------------------------------------------------------
-    # Gestão de perfis (pasta + ficheiro activo)
+    # Gestão de perfis (pasta + ficheiro ativo)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -62,7 +62,7 @@ class WorkbenchConfig:
 
     @staticmethod
     def active_name(active_path: Path) -> str | None:
-        """Devolve o nome do perfil activo, ou None se não estiver definido."""
+        """Devolve o nome do perfil ativo, ou None se não estiver definido."""
         if not active_path.exists():
             return None
         return active_path.read_text(encoding="utf-8").strip() or None
@@ -74,11 +74,11 @@ class WorkbenchConfig:
 
     @classmethod
     def load_active(cls, workbenches_dir: Path, active_path: Path) -> WorkbenchConfig:
-        """Carrega o perfil activo. Lança erro claro se nada estiver configurado."""
+        """Carrega o perfil ativo. Lança erro claro se nada estiver configurado."""
         name = cls.active_name(active_path)
         if name is None:
             raise FileNotFoundError(
-                "Nenhum perfil activo. Usa 'Configurar Bancada' para criar e activar um perfil."
+                "Nenhum perfil ativo. Usa 'Configurar Bancada' para criar e ativar um perfil."
             )
         path = cls.profile_path(workbenches_dir, name)
         if not path.exists():

@@ -18,7 +18,7 @@ class DetectorInterface(ABC):
         """Recebe um frame RGB e devolve as mãos detetadas.
 
         O frame chega sempre em RGB — a conversão BGR→RGB é feita
-        no processo da câmara antes de entrar na queue.
+        no processo da câmera antes de entrar na queue.
         """
         ...
 

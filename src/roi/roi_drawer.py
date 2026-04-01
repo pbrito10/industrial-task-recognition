@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Ferramenta interativa para desenhar ROIs sobre o feed da câmara.
+# Ferramenta interativa para desenhar ROIs sobre o feed da câmera.
 #
 # Controlos: 1-9 selecionar zona | Del apagar | s guardar | q sair
 #
@@ -225,7 +225,7 @@ class _DrawingSession:
 
 
 class RoiDrawer:
-    """Abre a câmara e permite definir ROIs interativamente.
+    """Abre a câmera e permite definir ROIs interativamente.
 
     Devolve a RoiCollection atualizada ao guardar, ou None se o utilizador
     sair sem guardar (ROIs anteriores são mantidas pelo chamador).

@@ -5,7 +5,7 @@
 # não de um frame mais recente com deteções de um frame mais antigo.
 #
 # O get() com timeout=0.1 s serve para que o loop verifique stop_event
-# regularmente em vez de bloquear indefinidamente se a câmara parar.
+# regularmente em vez de bloquear indefinidamente se a câmera parar.
 
 
 def run(frame_queue, detection_queue, stop_event, config):

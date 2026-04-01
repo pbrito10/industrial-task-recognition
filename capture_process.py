@@ -1,4 +1,4 @@
-# Câmara → frame_queue (RGB, espelho horizontal)
+# Câmera → frame_queue (RGB, espelho horizontal)
 #
 # OpenCV captura em BGR; convertemos para RGB aqui, uma vez, para não forçar
 # o detector a fazer esse trabalho em cada frame.

@@ -2,7 +2,7 @@
 #
 # Cada modo é uma composição de processos que comunicam via Queues:
 #
-#   Testar câmara:     capture → detector → display
+#   Testar câmera:     capture → detector → display
 #   Correr programa:   capture → detector → monitor  (+Streamlit como subprocess)
 #   Configurar Bancada: corre no processo principal (wizard interativo)
 #
@@ -79,7 +79,7 @@ def _launch(stop_event, **processos):
 
 
 def testar_camera(config):
-    """Abre a câmara e mostra o feed com keypoints. Não grava nada."""
+    """Abre a câmera e mostra o feed com keypoints. Não grava nada."""
     frame_queue     = Queue(maxsize=2)
     detection_queue = Queue(maxsize=5)
     stop_event      = Event()
@@ -154,7 +154,7 @@ def configurar_bancada(config):
 
 
 _OPCOES = {
-    "1": ("Testar câmara",       testar_camera),
+    "1": ("Testar câmera",       testar_camera),
     "2": ("Correr programa",     correr_programa),
     "3": ("Configurar Bancada",  configurar_bancada),
 }
@@ -187,6 +187,6 @@ def main():
 if __name__ == "__main__":
     # spawn em vez de fork — necessário para que OpenCV e X11 não herdem
     # estado do processo pai, o que causaria falhas ao usar múltiplos modos
-    # na mesma sessão (ex: Testar Câmara após Definir ROIs).
+    # na mesma sessão (ex: Testar Câmera após Definir ROIs).
     set_start_method("spawn")
     main()

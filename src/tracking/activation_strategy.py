@@ -39,7 +39,7 @@ class StillnessDwellStrategy(ActivationStrategy):
     (mão para brevemente). Sem este filtro, qualquer trânsito lento pela
     zona seria registado como tarefa.
 
-    O threshold em px/frame depende da resolução e da distância câmara-bancada.
+    O threshold em px/frame depende da resolução e da distância câmera-bancada.
     A 640x480, valores entre 3 e 8 px/frame funcionam bem na prática.
     """
 

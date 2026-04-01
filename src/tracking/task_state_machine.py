@@ -335,8 +335,8 @@ class TaskStateMachine:
             if zone is not None:
                 hands_per_zone[zone.name] = hands_per_zone.get(zone.name, 0) + 1
 
-        # Zonas two-hands só são activadas quando ambas as mãos já estão presentes.
-        # Activar com uma mão deixaria a máquina em WAITING_SECOND_HAND e bloquearia
+        # Zonas two-hands só são ativadas quando ambas as mãos já estão presentes.
+        # Ativar com uma mão deixaria a máquina em WAITING_SECOND_HAND e bloquearia
         # a detecção de qualquer outra zona de uma mão enquanto o operador trabalha.
         for zone_name, count in hands_per_zone.items():
             if zone_name in self._two_hands_zones and count >= 2:
