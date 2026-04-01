@@ -74,35 +74,30 @@ def _render_time_breakdown(data: dict) -> None:
     c3.metric("Interrupções", f"{bd['interruption_pct']:.1f} %")
 
 
-def _render_zone_table(data: dict) -> None:
-    """Secção 3 — Tabela de métricas por zona com gargalo destacado."""
-    st.subheader("Métricas por Zona")
-
-    task       = data.get("task_metrics", {})
-    bottleneck = data.get("bottleneck_zone")
-
-    if not task:
-        st.info("Ainda sem tarefas confirmadas.")
-        return
-
+def _build_zone_df(task: dict) -> pd.DataFrame:
+    """Constrói um DataFrame de métricas a partir de um dict de zonas."""
     rows = [
         {
-            "Zona":          zone,
-            "Ocorrências":   m["count"],
-            "Mín (s)":       m["min_s"],
-            "Médio (s)":     m["avg_s"],
-            "Máx (s)":       m["max_s"],
-            "Desvio Pad.":   m["std_dev_s"],
+            "Zona":        zone,
+            "Ocorrências": m["count"],
+            "Mín (s)":     m["min_s"],
+            "Médio (s)":   m["avg_s"],
+            "Máx (s)":     m["max_s"],
+            "Desvio Pad.": m["std_dev_s"],
         }
         for zone, m in task.items()
     ]
+    return pd.DataFrame(rows).set_index("Zona") if rows else pd.DataFrame()
 
-    df = pd.DataFrame(rows).set_index("Zona")
+
+def _render_zone_table_styled(df: pd.DataFrame, bottleneck: str | None) -> None:
+    """Apresenta um DataFrame de zonas com o gargalo destacado."""
+    if df.empty:
+        st.info("Ainda sem dados.")
+        return
 
     def _highlight(row):
-        bg = ""
-        if row.name == bottleneck:
-            bg = "background-color: #ff4b4b33"
+        bg = "background-color: #ff4b4b33" if row.name == bottleneck else ""
         return [bg] * len(row)
 
     styled = (
@@ -112,13 +107,49 @@ def _render_zone_table(data: dict) -> None:
     )
     st.dataframe(styled, use_container_width=True)
 
-    if bottleneck:
-        st.caption(f"Gargalo: {bottleneck} (maior tempo médio)")
+
+def _render_zone_tables(data: dict) -> None:
+    """Secção 3 — Três tabelas: ciclo atual, ciclos corretos, ciclos fora de ordem."""
+    st.subheader("Métricas por Zona")
+
+    bottleneck = data.get("bottleneck_zone")
+
+    tab_current, tab_correct, tab_incorrect = st.tabs([
+        "Ciclo atual",
+        "Ciclos em ordem",
+        "Ciclos fora de ordem",
+    ])
+
+    with tab_current:
+        task = data.get("current_cycle_metrics", {})
+        if not task:
+            st.info("Nenhuma tarefa no ciclo em curso.")
+        else:
+            df = _build_zone_df(task)
+            _render_zone_table_styled(df, bottleneck=None)
+
+    with tab_correct:
+        task = data.get("correct_cycle_metrics", {})
+        if not task:
+            st.info("Ainda sem ciclos com ordem correta.")
+        else:
+            df = _build_zone_df(task)
+            _render_zone_table_styled(df, bottleneck)
+            if bottleneck:
+                st.caption(f"Gargalo: {bottleneck} (maior tempo médio)")
+
+    with tab_incorrect:
+        task = data.get("incorrect_cycle_metrics", {})
+        if not task:
+            st.info("Ainda sem ciclos fora de ordem.")
+        else:
+            df = _build_zone_df(task)
+            _render_zone_table_styled(df, bottleneck=None)
 
 
 def _render_charts(data: dict) -> None:
     """Secção 4 — Gráficos: tempo médio por zona e decomposição do tempo."""
-    task = data.get("task_metrics", {})
+    task = data.get("correct_cycle_metrics", {})
 
     st.subheader("Gráficos")
 
@@ -129,7 +160,7 @@ def _render_charts(data: dict) -> None:
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.caption("Tempo médio por zona (s)")
+        st.caption("Tempo médio por zona — ciclos corretos (s)")
         df_avg = pd.DataFrame(
             {"Tempo médio (s)": {zone: m["avg_s"] for zone, m in task.items()}}
         )
@@ -150,7 +181,7 @@ def _render(data: dict) -> None:
     st.divider()
     _render_time_breakdown(data)
     st.divider()
-    _render_zone_table(data)
+    _render_zone_tables(data)
     st.divider()
     _render_charts(data)
 

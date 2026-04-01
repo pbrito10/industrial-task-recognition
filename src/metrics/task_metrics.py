@@ -38,6 +38,10 @@ class TaskMetrics:
         total = sum((d.total_seconds() for d in self._durations), 0.0)
         return timedelta(seconds=total / self.count())
 
+    def durations(self) -> list[timedelta]:
+        """Lista de durações individuais — usada para fundir métricas entre buckets."""
+        return list(self._durations)
+
     def std_deviation(self) -> timedelta:
         """Desvio padrão das durações. Devolve timedelta(0) se count() < 2."""
         if self.count() < 2:

@@ -12,14 +12,20 @@ class MetricsSnapshot:
     """Snapshot imutável de todas as métricas num dado momento.
 
     Transporta o estado calculado pelo MetricsCalculator para os
-    consumidores (DashboardWriter, ExcelExporter) de forma tipada —
-    sem dicts genéricos cujas chaves e tipos são desconhecidos.
+    consumidores (DashboardWriter, ExcelExporter) de forma tipada.
 
-    As três percentagens somam 100% (dentro de margem de arredondamento).
+    Os três buckets de métricas por zona permitem distinguir o ciclo
+    em curso, os ciclos corretos acumulados e os ciclos fora de ordem.
     """
 
-    # Métricas por zona — só tarefas was_forced=False
-    task_metrics: dict[str, TaskMetrics]
+    # Ciclo em curso — reseta quando o ciclo fecha
+    current_cycle_metrics:  dict[str, TaskMetrics]
+
+    # Acumulado de ciclos com ordem correta
+    correct_cycle_metrics:  dict[str, TaskMetrics]
+
+    # Acumulado de ciclos fora de ordem
+    incorrect_cycle_metrics: dict[str, TaskMetrics]
 
     # Métricas de ciclos completos
     cycle_metrics: CycleMetrics
@@ -34,7 +40,7 @@ class MetricsSnapshot:
     transition_percentage:    float
     interruption_percentage:  float
 
-    # Zona que mais atrasa o ciclo; None se ainda não há dados suficientes
+    # Zona com maior tempo médio nos ciclos corretos; None se ainda não há dados
     bottleneck_zone: str | None
 
     session_duration: timedelta

@@ -12,21 +12,23 @@ from src.tracking.task_event import TaskEvent
 class MetricsCalculator:
     """Agrega eventos em métricas online à medida que chegam do pipeline.
 
+    Mantém três buckets de métricas por zona:
+      - current_cycle   — tarefas do ciclo em curso (reseta ao fechar)
+      - correct_cycles  — tarefas acumuladas de ciclos com ordem correta
+      - incorrect_cycles — tarefas acumuladas de ciclos fora de ordem
+
     A separação produtivo/interrupção é feita aqui com base em was_forced:
       - False → tarefa concluída normalmente → tempo produtivo
       - True  → tarefa fechada por timeout   → tempo de interrupção
-
-    O tempo de transição não é medido diretamente — é o que sobra:
-    sessão total − produtivo − interrupção. Pode incluir tempo entre zonas,
-    hesitações do operador, ou qualquer período sem mão detetada.
     """
 
     def __init__(self, session_start: datetime, zone_names: list[str]) -> None:
         self._session_start = session_start
 
-        self._task_metrics: dict[str, TaskMetrics] = {
-            name: TaskMetrics() for name in zone_names
-        }
+        self._current_cycle:    dict[str, TaskMetrics] = {}
+        self._correct_cycles:   dict[str, TaskMetrics] = {}
+        self._incorrect_cycles: dict[str, TaskMetrics] = {}
+
         self._cycle_metrics     = CycleMetrics()
         self._productive_time   = timedelta(0)
         self._interruption_time = timedelta(0)
@@ -38,16 +40,22 @@ class MetricsCalculator:
 
         self._productive_time += event.duration
 
-        # Zonas não previstas em settings.yaml chegam aqui se o operador
-        # visitar uma zona fora do conjunto configurado — criamos a entrada
-        # em vez de ignorar ou lançar excepção.
-        if event.zone_name not in self._task_metrics:
-            self._task_metrics[event.zone_name] = TaskMetrics()
-
-        self._task_metrics[event.zone_name].add(event.duration)
+        if event.zone_name not in self._current_cycle:
+            self._current_cycle[event.zone_name] = TaskMetrics()
+        self._current_cycle[event.zone_name].add(event.duration)
 
     def record_cycle(self, cycle_result: CycleResult) -> None:
         self._cycle_metrics.add(cycle_result.duration, cycle_result.order_ok)
+
+        # Move as tarefas do ciclo fechado para o bucket correto e reseta o ciclo atual
+        target = self._correct_cycles if cycle_result.order_ok else self._incorrect_cycles
+        for zone, metrics in self._current_cycle.items():
+            if zone not in target:
+                target[zone] = TaskMetrics()
+            for d in metrics.durations():
+                target[zone].add(d)
+
+        self._current_cycle = {}
 
     def snapshot(self) -> MetricsSnapshot:
         now              = datetime.now()
@@ -56,7 +64,9 @@ class MetricsCalculator:
         percentages      = self._percentages(session_duration)
 
         return MetricsSnapshot(
-            task_metrics=dict(self._task_metrics),
+            current_cycle_metrics=dict(self._current_cycle),
+            correct_cycle_metrics=dict(self._correct_cycles),
+            incorrect_cycle_metrics=dict(self._incorrect_cycles),
             cycle_metrics=self._cycle_metrics,
             productive_time=self._productive_time,
             transition_time=transition_time,
@@ -71,7 +81,6 @@ class MetricsCalculator:
 
     def _transition_time(self, session_duration: timedelta) -> timedelta:
         transition = session_duration - self._productive_time - self._interruption_time
-        # Pequenas variações de timing podem dar resultado ligeiramente negativo
         return max(transition, timedelta(0))
 
     def _percentages(self, session_duration: timedelta) -> tuple[float, float, float]:
@@ -82,15 +91,14 @@ class MetricsCalculator:
 
         productive   = self._productive_time.total_seconds()   / total_seconds * 100
         interruption = self._interruption_time.total_seconds() / total_seconds * 100
-        # Transição calculada como complemento para garantir que os três somam 100%
         transition   = max(0.0, 100.0 - productive - interruption)
         return productive, transition, interruption
 
     def _bottleneck_zone(self) -> str | None:
-        """Zona com maior tempo médio de tarefa — None se ainda não há dados."""
+        """Zona com maior tempo médio nos ciclos corretos — None se ainda não há dados."""
         zones_with_data = [
             (name, metrics)
-            for name, metrics in self._task_metrics.items()
+            for name, metrics in self._correct_cycles.items()
             if metrics.count() > 0
         ]
 

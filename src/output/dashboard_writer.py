@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.metrics.task_metrics import TaskMetrics
 from src.output.metrics_snapshot import MetricsSnapshot
 from src.output.output_interface import OutputInterface
 
@@ -27,10 +28,12 @@ class DashboardWriter(OutputInterface):
 
     def _serialize(self, snapshot: MetricsSnapshot) -> dict:
         return {
-            "captured_at":      snapshot.captured_at.isoformat(),
-            "session_duration": snapshot.session_duration.total_seconds(),
-            "task_metrics":     self._serialize_task_metrics(snapshot),
-            "cycle_metrics":    self._serialize_cycle_metrics(snapshot),
+            "captured_at":           snapshot.captured_at.isoformat(),
+            "session_duration":      snapshot.session_duration.total_seconds(),
+            "current_cycle_metrics": self._serialize_zone_metrics(snapshot.current_cycle_metrics),
+            "correct_cycle_metrics": self._serialize_zone_metrics(snapshot.correct_cycle_metrics),
+            "incorrect_cycle_metrics": self._serialize_zone_metrics(snapshot.incorrect_cycle_metrics),
+            "cycle_metrics":         self._serialize_cycle_metrics(snapshot),
             "time_breakdown": {
                 "productive_pct":   round(snapshot.productive_percentage, 2),
                 "transition_pct":   round(snapshot.transition_percentage, 2),
@@ -39,9 +42,9 @@ class DashboardWriter(OutputInterface):
             "bottleneck_zone": snapshot.bottleneck_zone,
         }
 
-    def _serialize_task_metrics(self, snapshot: MetricsSnapshot) -> dict:
+    def _serialize_zone_metrics(self, metrics_dict: dict[str, TaskMetrics]) -> dict:
         result = {}
-        for zone_name, metrics in snapshot.task_metrics.items():
+        for zone_name, metrics in metrics_dict.items():
             if metrics.count() == 0:
                 continue
             result[zone_name] = {

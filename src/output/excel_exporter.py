@@ -83,7 +83,7 @@ class ExcelExporter(OutputInterface):
 
     def _write_zone_metrics(self, writer: pd.ExcelWriter, snapshot: MetricsSnapshot) -> None:
         rows = []
-        for zone_name, metrics in snapshot.task_metrics.items():
+        for zone_name, metrics in snapshot.correct_cycle_metrics.items():
             if metrics.count() == 0:
                 continue
             rows.append({
@@ -99,6 +99,7 @@ class ExcelExporter(OutputInterface):
         df.to_excel(writer, sheet_name="Métricas por Zona", index=False)
         self._bold_headers(writer, "Métricas por Zona", df)
         self._highlight_bottleneck(writer, "Métricas por Zona", df, snapshot.bottleneck_zone)
+        # Nota: esta folha agrega apenas os ciclos com ordem correta
 
     def _write_cycles(self, writer: pd.ExcelWriter) -> None:
         # Agrupa eventos por ciclo para reconstruir início e fim de cada ciclo
