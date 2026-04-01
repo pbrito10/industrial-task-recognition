@@ -39,7 +39,7 @@ class _MonitorSession:
         self._last_dashboard_write  = datetime.min
         self._last_detection_per_zone: dict = {}
 
-        workbench = WorkbenchConfig.load(Path(workbench_path), Path(__file__).parent / "config" / "settings.yaml")
+        workbench = WorkbenchConfig.load(Path(workbench_path))
 
         rois                  = JsonRoiRepository(path=Path(roi_path)).load()
         self._rois            = rois

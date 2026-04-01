@@ -18,19 +18,17 @@ class SetupWizard:
         self,
         workbench_path: Path,
         roi_path:       Path,
-        settings_path:  Path,
         camera_config:  dict,
     ) -> None:
         self._workbench_path = workbench_path
         self._roi_path       = roi_path
-        self._settings_path  = settings_path
         self._camera_config  = camera_config
 
     def run(self) -> None:
         print("\n=== Configurar Bancada ===")
         print("Podes pressionar Enter em qualquer passo para manter o valor actual.\n")
 
-        current = WorkbenchConfig.load(self._workbench_path, self._settings_path)
+        current = WorkbenchConfig.load(self._workbench_path) if self._workbench_path.exists() else WorkbenchConfig([], [], [], "", "")
 
         zones           = self._step_zones(current.zones)
         rois            = self._step_draw_rois(zones)

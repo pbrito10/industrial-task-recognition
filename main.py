@@ -103,6 +103,10 @@ def correr_programa(config):
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
+    if not _WORKBENCH_PATH.exists():
+        print("Bancada não configurada. Usa a opção 3 (Configurar Bancada) primeiro.")
+        return
+
     if not JsonRoiRepository(path=_ROI_PATH).load().all():
         print("Nenhuma ROI definida. Usa a opção 3 (Configurar Bancada) primeiro.")
         return
@@ -141,7 +145,6 @@ def configurar_bancada(config):
     SetupWizard(
         workbench_path=_WORKBENCH_PATH,
         roi_path=_ROI_PATH,
-        settings_path=_CONFIG_PATH,
         camera_config=config["camera"],
     ).run()
 
