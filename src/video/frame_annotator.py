@@ -27,12 +27,6 @@ _HAND_CONNECTIONS = [
     (5, 9), (9, 13), (13, 17),             # Palma
 ]
 
-# A câmera está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
-_FLIPPED_SIDE: dict[HandSide, HandSide] = {
-    HandSide.LEFT:  HandSide.RIGHT,
-    HandSide.RIGHT: HandSide.LEFT,
-}
-
 _HAND_COLORS: dict[HandSide, tuple[int, int, int]] = {
     HandSide.LEFT:  (255, 100, 0),
     HandSide.RIGHT: (0, 200, 50),
@@ -73,8 +67,7 @@ def _draw_bounding_box(
     br = detection.bounding_box.bottom_right
     cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), color, _LINE_THICKNESS)
 
-    flipped_side = _FLIPPED_SIDE[detection.hand_side]
-    label = f"{flipped_side.value}  {detection.confidence.as_percentage():.0f}%"
+    label = f"{detection.hand_side.value}  {detection.confidence.as_percentage():.0f}%"
     cv2.putText(frame, label, (tl.x, tl.y - 8), _FONT, 0.5, color, 1)
 
 
