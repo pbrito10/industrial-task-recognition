@@ -6,8 +6,8 @@
 # (OpenCV, MediaPipe) no processo pai sem necessidade.
 
 
-def run(detection_queue, stop_event, config, roi_path):
-    _MonitorSession(config, roi_path).execute(detection_queue, stop_event)
+def run(detection_queue, stop_event, config, roi_path, workbench_path):
+    _MonitorSession(config, roi_path, workbench_path).execute(detection_queue, stop_event)
 
 
 class _MonitorSession:
@@ -17,7 +17,7 @@ class _MonitorSession:
     limpo e cada peça pode ser testada isoladamente.
     """
 
-    def __init__(self, config: dict, roi_path: str) -> None:
+    def __init__(self, config: dict, roi_path: str, workbench_path: str) -> None:
         from datetime import datetime, timedelta
         from pathlib import Path
 
@@ -31,12 +31,15 @@ class _MonitorSession:
             OneHandStateMachine, TaskStateMachine, TwoHandsStateMachine,
         )
         from src.tracking.zone_classifier import ZoneClassifier
+        from src.wizard.workbench_config import WorkbenchConfig
 
         self._config        = config
         self._session_start = datetime.now()
         self._frame_idx     = 0
         self._last_dashboard_write  = datetime.min
         self._last_detection_per_zone: dict = {}
+
+        workbench = WorkbenchConfig.load(Path(workbench_path), Path(__file__).parent / "config" / "settings.yaml")
 
         rois                  = JsonRoiRepository(path=Path(roi_path)).load()
         self._rois            = rois
@@ -48,10 +51,10 @@ class _MonitorSession:
         self._refresh_interval = timedelta(seconds=config["dashboard"]["refresh_seconds"])
 
         self._cycle_tracker    = CycleTracker(
-            exit_zone=config["tracking"]["exit_zone"],
-            expected_order=config["tracking"]["cycle_zone_order"],
+            exit_zone=workbench.exit_zone,
+            expected_order=workbench.cycle_zone_order,
         )
-        self._metrics          = MetricsCalculator(self._session_start, config["tracking"]["zones"])
+        self._metrics          = MetricsCalculator(self._session_start, workbench.zones)
         self._dashboard_writer = DashboardWriter(Path(config["dashboard"]["data_path"]))
         self._excel_exporter   = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
 
@@ -59,7 +62,7 @@ class _MonitorSession:
 
         one_hand  = OneHandStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
         two_hands = TwoHandsStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
-        self._state_machine = TaskStateMachine(one_hand, two_hands, config["tracking"]["two_hands_zones"])
+        self._state_machine = TaskStateMachine(one_hand, two_hands, workbench.two_hands_zones)
 
     def execute(self, detection_queue, stop_event) -> None:
         from pathlib import Path
