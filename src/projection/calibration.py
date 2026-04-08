@@ -91,14 +91,15 @@ def _detect_green_circles(
 
 
 def run_calibration(
-    camera_index:      int,
-    camera_width:      int,
-    camera_height:     int,
-    projector_width:   int,
-    projector_height:  int,
-    display_offset_x:  int,
-    display_offset_y:  int,
-    calibration_path:  Path,
+    camera_index:             int,
+    camera_width:             int,
+    camera_height:            int,
+    projector_width:          int,
+    projector_height:         int,
+    display_offset_x:         int,
+    display_offset_y:         int,
+    calibration_path:         Path,
+    stabilization_seconds:    int = 5,
 ) -> bool:
     """Corre a calibração automática. Devolve True se bem sucedido."""
 
@@ -116,9 +117,10 @@ def run_calibration(
     cv2.waitKey(200)                                          # gestor de janelas processa o move
     cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    # Mantém o event loop vivo durante a estabilização (2 s × 10 × 200 ms)
-    print("  Padrão de calibração projetado. A aguardar estabilização (2s)...")
-    for _ in range(10):
+    # Mantém o event loop vivo durante a estabilização (waitKey em vez de sleep)
+    n_ticks = stabilization_seconds * 5  # 200 ms por tick
+    print(f"  Padrão de calibração projetado. A aguardar estabilização ({stabilization_seconds}s)...")
+    for _ in range(n_ticks):
         cv2.waitKey(200)
 
     # --- Captura e deteta ---

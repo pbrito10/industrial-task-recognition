@@ -169,14 +169,15 @@ class SetupWizard:
         input("  Pressiona Enter para iniciar (ou Ctrl+C para cancelar)...")
 
         ok = run_calibration(
-            camera_index      = self._camera_config["index"],
-            camera_width      = self._camera_config["width"],
-            camera_height     = self._camera_config["height"],
-            projector_width   = proj["resolution_width"],
-            projector_height  = proj["resolution_height"],
-            display_offset_x  = proj["display_offset_x"],
-            display_offset_y  = proj["display_offset_y"],
-            calibration_path  = Path(proj["calibration_path"]),
+            camera_index           = self._camera_config["index"],
+            camera_width           = self._camera_config["width"],
+            camera_height          = self._camera_config["height"],
+            projector_width        = proj["resolution_width"],
+            projector_height       = proj["resolution_height"],
+            display_offset_x       = proj["display_offset_x"],
+            display_offset_y       = proj["display_offset_y"],
+            calibration_path       = Path(proj["calibration_path"]),
+            stabilization_seconds  = proj.get("calibration_stabilization_seconds", 5),
         )
 
         if ok:

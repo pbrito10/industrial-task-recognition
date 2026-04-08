@@ -55,6 +55,7 @@ projector:
   enabled: false                                      # true para ativar o guia projetado
   resolution_width:  1920
   resolution_height: 1080
-  display_offset_x:  1920                             # posição X do monitor do projetor
+  display_offset_x:  3840                             # posição X do monitor do projetor (ver: xrandr | grep connected)
   display_offset_y:  0
   calibration_path:  "config/projection_calibration.json"
+  calibration_stabilization_seconds: 5               # tempo de espera após projetar o padrão
