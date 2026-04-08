@@ -52,18 +52,30 @@ class ProjectorRenderer:
         if active_zone is None:
             return frame
 
+        if active_zone != getattr(self, '_last_logged_zone', None):
+            self._last_logged_zone = active_zone
+            self._log_next = True
+
         roi = self._rois.get(active_zone)
         if roi is None:
+            if getattr(self, '_log_next', False):
+                print(f"[renderer] ROI '{active_zone}' não encontrado")
+                self._log_next = False
             return frame
 
         tl, br = transform_roi(roi, self._H)
+
+        if getattr(self, '_log_next', False):
+            print(f"[renderer] '{active_zone}'"
+                  f"  cam=({roi.top_left.x},{roi.top_left.y})-({roi.bottom_right.x},{roi.bottom_right.y})"
+                  f"  →  proj tl={tl} br={br}  (projetor {self._width}x{self._height})")
+            self._log_next = False
 
         # Clipa para não sair dos limites do projetor
         tl = (max(0, tl[0]), max(0, tl[1]))
         br = (min(self._width - 1, br[0]), min(self._height - 1, br[1]))
 
         if tl[0] >= br[0] or tl[1] >= br[1]:
-            # ROI transformado inválido — skip silencioso
             return frame
 
         self._draw_pulsing_rect(frame, tl, br)
