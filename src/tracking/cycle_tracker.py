@@ -120,6 +120,49 @@ class CycleTracker:
 
         return None  # ciclo completo, aguarda próximo início
 
+    def projection_target(self, in_progress_zone: str | None) -> str | None:
+        """Zona a destacar no projetor em tempo real.
+
+        Se o operador já está a trabalhar em 'in_progress_zone' (DWELLING ou
+        TASK_IN_PROGRESS) e essa é a zona esperada, devolve a zona SEGUINTE na
+        sequência — para guiar o operador para onde vai a seguir enquanto ainda
+        está na zona atual.
+
+        Se 'in_progress_zone' é None ou não é a zona esperada, comporta-se
+        como next_zone() (mostra onde o operador deve ir agora).
+        """
+        next_z = self.next_zone()
+
+        if in_progress_zone is None or in_progress_zone != next_z:
+            return next_z
+
+        # Operador está na zona certa. Devolve a zona que se segue a in_progress_zone.
+        expected = self._expected_order
+
+        # Ciclo ainda não começou: in_progress_zone é expected[0] (start_zone)
+        if not self._cycle_started:
+            return expected[1] if len(expected) > 1 else None
+
+        # Ciclo em curso: recalcula o ptr para encontrar a posição exata
+        # (necessário porque zonas como "Montagem" aparecem várias vezes)
+        actual = [t.zone_name for t in self._tasks_in_cycle if not t.was_forced]
+
+        ptr = 0
+        for zone in actual:
+            if zone == expected[ptr]:
+                continue
+            if ptr + 1 < len(expected) and zone == expected[ptr + 1]:
+                ptr += 1
+                continue
+            return next_z  # fora de ordem — fallback
+
+        # ptr = última concluída; ptr+1 = in_progress_zone; ptr+2 = seguinte
+        next_idx = ptr + 1
+        if next_idx + 1 < len(expected):
+            return expected[next_idx + 1]
+
+        return None  # in_progress_zone é a última da sequência
+
     def _is_cycle_complete(self, event: TaskEvent) -> bool:
         return event.zone_name == self._exit_zone and not event.was_forced
 

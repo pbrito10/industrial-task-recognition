@@ -31,6 +31,9 @@ class StateMachineInterface(ABC):
     @abstractmethod
     def state(self) -> TaskState: ...
 
+    @abstractmethod
+    def tracked_zone(self) -> str | None: ...
+
 
 class OneHandStateMachine(StateMachineInterface):
     """Máquina de estados para zonas que exigem apenas uma mão.
@@ -61,6 +64,9 @@ class OneHandStateMachine(StateMachineInterface):
 
     def state(self) -> TaskState:
         return self._task_state
+
+    def tracked_zone(self) -> str | None:
+        return self._tracked_zone
 
     def update(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> TaskEvent | None:
         if self._task_state == TaskState.IDLE:
@@ -184,6 +190,9 @@ class TwoHandsStateMachine(StateMachineInterface):
 
     def state(self) -> TaskState:
         return self._task_state
+
+    def tracked_zone(self) -> str | None:
+        return self._tracked_zone
 
     def update(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> TaskEvent | None:
         if self._task_state == TaskState.IDLE:
@@ -366,3 +375,9 @@ class TaskStateMachine:
         if self._active is None:
             return TaskState.IDLE
         return self._active.state()
+
+    def current_tracked_zone(self) -> str | None:
+        """Zona em DWELLING ou TASK_IN_PROGRESS, ou None se não há tarefa ativa."""
+        if self._active is None:
+            return None
+        return self._active.tracked_zone()
