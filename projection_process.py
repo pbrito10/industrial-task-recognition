@@ -71,6 +71,8 @@ class _ProjectionSession:
         active_zone: list[str | None] = [None]
         photo_ref:   list             = [None]   # evita garbage collection do PhotoImage
 
+        _tick_count = [0]
+
         def tick() -> None:
             # Drena a queue — interessa só a última atualização
             try:
@@ -80,6 +82,13 @@ class _ProjectionSession:
                 pass
 
             frame_bgr = self._renderer.render(active_zone[0])
+
+            # Diagnóstico: imprime zona e brilho médio do frame a cada 90 ticks (~3s)
+            _tick_count[0] += 1
+            if _tick_count[0] % 90 == 1:
+                brightness = int(frame_bgr.mean())
+                print(f"[projector] zona={active_zone[0]}  brilho_frame={brightness}")
+
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
             photo     = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
             label.configure(image=photo)
