@@ -105,15 +105,21 @@ def run_calibration(
     proj_pts = _circle_positions(projector_width, projector_height)
 
     # --- Projeta o padrão de calibração ---
+    # Ordem obrigatória: imshow primeiro (cria a janela), depois move e fullscreen.
+    # O event loop do OpenCV depende de waitKey para renderizar — time.sleep sozinho
+    # congela a janela antes de aparecer no projetor.
     win = "Calibracao_Projetor"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-    cv2.moveWindow(win, display_offset_x, display_offset_y)
-    cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.imshow(win, _build_projector_frame(projector_width, projector_height))
-    cv2.waitKey(1)
+    cv2.waitKey(200)                                          # renderiza a janela
+    cv2.moveWindow(win, display_offset_x, display_offset_y)  # move para o projetor
+    cv2.waitKey(200)                                          # gestor de janelas processa o move
+    cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
+    # Mantém o event loop vivo durante a estabilização (2 s × 10 × 200 ms)
     print("  Padrão de calibração projetado. A aguardar estabilização (2s)...")
-    time.sleep(2)
+    for _ in range(10):
+        cv2.waitKey(200)
 
     # --- Captura e deteta ---
     cap = cv2.VideoCapture(camera_index)

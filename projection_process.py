@@ -47,11 +47,16 @@ class _ProjectionSession:
     def execute(self, projection_queue, stop_event) -> None:
         import queue
         import cv2
+        import numpy as np
 
         win = "Projetor"
         cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+        cv2.imshow(win, np.zeros((self._height, self._width, 3), dtype=np.uint8))
+        cv2.waitKey(200)
         cv2.moveWindow(win, self._offset_x, self._offset_y)
+        cv2.waitKey(200)
         cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.waitKey(200)
 
         active_zone: str | None = None
 
