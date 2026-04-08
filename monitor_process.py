@@ -185,11 +185,12 @@ class _MonitorSession:
         debug_logger.log_task_complete(task_event)
 
     def _maybe_update_projection(self) -> None:
-        """Envia a zona alvo para o projetor quando esta muda.
+        """Envia (zona_atual, zona_seguinte) ao projetor quando o par muda.
 
-        Usa projection_target() em vez de next_zone() para que o projetor
-        mostre a zona SEGUINTE assim que o operador começa a zona atual
-        (DWELLING ou IN_PROGRESS), não só após a concluir.
+        zona_atual  — zona em DWELLING ou TASK_IN_PROGRESS (o que o operador
+                      está a fazer agora); None se a state machine está IDLE.
+        zona_seguinte — próxima zona esperada na sequência do ciclo.
+
         put_nowait evita bloquear o loop principal se o processo do projetor
         estiver lento ou tiver terminado inesperadamente.
         """
@@ -197,15 +198,16 @@ class _MonitorSession:
             return
 
         import queue
-        in_progress = self._state_machine.current_tracked_zone()
-        target      = self._cycle_tracker.projection_target(in_progress)
+        current = self._state_machine.current_tracked_zone()
+        nxt     = self._cycle_tracker.next_zone()
+        pair    = (current, nxt)
 
-        if target != self._last_next_zone:
+        if pair != self._last_next_zone:
             try:
-                self._projection_queue.put_nowait(target)
+                self._projection_queue.put_nowait(pair)
             except queue.Full:
                 pass  # projetor não acompanhou — descarta, tenta no próximo frame
-            self._last_next_zone = target
+            self._last_next_zone = pair
 
     def _maybe_refresh_dashboard(self, now) -> None:
         from datetime import datetime

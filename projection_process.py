@@ -68,27 +68,20 @@ class _ProjectionSession:
         label = tk.Label(root, bg="black", borderwidth=0)
         label.pack(fill="both", expand=True)
 
-        active_zone: list[str | None] = [None]
-        photo_ref:   list             = [None]   # evita garbage collection do PhotoImage
-
-        _tick_count = [0]
+        # Par (zona_atual, zona_seguinte) recebido do monitor_process
+        proj_state: list[tuple] = [(None, None)]
+        photo_ref:  list        = [None]   # evita garbage collection do PhotoImage
 
         def tick() -> None:
-            # Drena a queue — interessa só a última atualização
+            # Drena a queue — interessa só o par mais recente
             try:
                 while True:
-                    active_zone[0] = projection_queue.get_nowait()
+                    proj_state[0] = projection_queue.get_nowait()
             except q_module.Empty:
                 pass
 
-            frame_bgr = self._renderer.render(active_zone[0])
-
-            # Diagnóstico: imprime zona e brilho médio do frame a cada 90 ticks (~3s)
-            _tick_count[0] += 1
-            if _tick_count[0] % 90 == 1:
-                brightness = int(frame_bgr.mean())
-                print(f"[projector] zona={active_zone[0]}  brilho_frame={brightness}")
-
+            current_zone, next_zone = proj_state[0]
+            frame_bgr = self._renderer.render(current_zone, next_zone)
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
             photo     = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
             label.configure(image=photo)
