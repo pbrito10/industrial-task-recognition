@@ -105,27 +105,37 @@ def run_calibration(
 
     proj_pts = _circle_positions(projector_width, projector_height)
 
-    # --- Projeta o padrão de calibração ---
-    # Ordem obrigatória: imshow primeiro (cria a janela), depois move e fullscreen.
-    # O event loop do OpenCV depende de waitKey para renderizar — time.sleep sozinho
-    # congela a janela antes de aparecer no projetor.
-    # WINDOW_FULLSCREEN é ignorado por muitos window managers Linux quando a janela
-    # está noutro monitor. Usa-se WINDOW_NORMAL + moveWindow + resizeWindow, que
-    # funciona independentemente do compositor.
-    win = "Calibracao_Projetor"
-    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-    cv2.imshow(win, _build_projector_frame(projector_width, projector_height))
-    cv2.waitKey(200)
-    cv2.moveWindow(win, display_offset_x, display_offset_y)
-    cv2.waitKey(200)
-    cv2.resizeWindow(win, projector_width, projector_height)
-    print(f"  [debug] janela em ({display_offset_x}, {display_offset_y}), {projector_width}×{projector_height}")
+    # --- Projeta o padrão de calibração via tkinter ---
+    # cv2.moveWindow é ignorado por muitos compositors Linux — o window manager
+    # reposiciona a janela para o monitor principal. tkinter com overrideredirect(True)
+    # remove as decorações e coloca a janela exatamente nas coordenadas indicadas.
+    import tkinter as tk
 
-    # Mantém o event loop vivo durante a estabilização (waitKey em vez de sleep)
-    n_ticks = stabilization_seconds * 5  # 200 ms por tick
-    print(f"  Padrão de calibração projetado. A aguardar estabilização ({stabilization_seconds}s)...")
-    for _ in range(n_ticks):
-        cv2.waitKey(200)
+    root = tk.Tk()
+    root.geometry(f"{projector_width}x{projector_height}+{display_offset_x}+{display_offset_y}")
+    root.overrideredirect(True)
+    root.configure(bg="black")
+
+    canvas = tk.Canvas(root, width=projector_width, height=projector_height,
+                       bg="black", highlightthickness=0)
+    canvas.pack()
+
+    r = _CIRCLE_RADIUS
+    for (cx, cy) in _circle_positions(projector_width, projector_height):
+        canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                           fill="#00FF00", outline="#00FF00")
+
+    root.update()
+
+    print(f"  Padrão projetado em ({display_offset_x}, {display_offset_y}). "
+          f"A aguardar estabilização ({stabilization_seconds}s)...")
+
+    end = time.time() + stabilization_seconds
+    while time.time() < end:
+        root.update()
+        time.sleep(0.05)
+
+    root.destroy()
 
     # --- Captura e deteta ---
     cap = cv2.VideoCapture(camera_index)

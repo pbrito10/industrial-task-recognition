@@ -45,32 +45,43 @@ class _ProjectionSession:
         self._renderer = ProjectorRenderer(self._width, self._height, rois, H)
 
     def execute(self, projection_queue, stop_event) -> None:
-        import queue
+        import queue as q_module
+        import tkinter as tk
         import cv2
-        import numpy as np
+        from PIL import Image, ImageTk
 
-        win = "Projetor"
-        cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-        cv2.imshow(win, np.zeros((self._height, self._width, 3), dtype=np.uint8))
-        cv2.waitKey(200)
-        cv2.moveWindow(win, self._offset_x, self._offset_y)
-        cv2.waitKey(200)
-        cv2.resizeWindow(win, self._width, self._height)
-        cv2.waitKey(200)
+        # tkinter com overrideredirect garante posicionamento correto em qualquer
+        # monitor sem interferência do compositor/window manager.
+        root = tk.Tk()
+        root.geometry(f"{self._width}x{self._height}+{self._offset_x}+{self._offset_y}")
+        root.overrideredirect(True)
+        root.configure(bg="black")
 
-        active_zone: str | None = None
+        label = tk.Label(root, bg="black", borderwidth=0)
+        label.pack(fill="both", expand=True)
 
-        try:
-            while not stop_event.is_set():
-                # Drena a queue e fica com a atualização mais recente
-                try:
-                    while True:
-                        active_zone = projection_queue.get_nowait()
-                except queue.Empty:
-                    pass
+        active_zone: list[str | None] = [None]
+        photo_ref:   list             = [None]   # evita garbage collection do PhotoImage
 
-                frame = self._renderer.render(active_zone)
-                cv2.imshow(win, frame)
-                cv2.waitKey(33)  # ~30 fps
-        finally:
-            cv2.destroyWindow(win)
+        def tick() -> None:
+            # Drena a queue — interessa só a última atualização
+            try:
+                while True:
+                    active_zone[0] = projection_queue.get_nowait()
+            except q_module.Empty:
+                pass
+
+            frame_bgr = self._renderer.render(active_zone[0])
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            photo     = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
+            label.configure(image=photo)
+            photo_ref[0] = photo
+
+            if not stop_event.is_set():
+                root.after(33, tick)   # ~30 fps
+            else:
+                root.quit()
+
+        root.after(0, tick)
+        root.mainloop()
+        root.destroy()
