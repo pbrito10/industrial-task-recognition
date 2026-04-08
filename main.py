@@ -127,6 +127,27 @@ def definir_rois(config):
     print(f"ROIs guardadas: {len(result.all())} zonas definidas.")
 
 
+def _validate_config_vs_rois(config: dict, roi_names: set[str]) -> list[str]:
+    """Verifica que as zonas referenciadas na config existem nas ROIs desenhadas.
+
+    Retorna lista de erros (vazia se tudo estiver consistente). Não lança exceção
+    para que o chamador possa imprimir todas as inconsistências de uma vez.
+    """
+    errors = []
+
+    # Zonas referenciadas pela config que podem faltar nas ROIs
+    exit_zone       = config["tracking"]["exit_zone"]
+    two_hands_zones = set(config["tracking"]["two_hands_zones"])
+    order_zones     = set(config["tracking"]["cycle_zone_order"])
+    required        = ({exit_zone} | two_hands_zones | order_zones)
+
+    missing = required - roi_names
+    for zone in sorted(missing):
+        errors.append(f"  • Zona '{zone}' referenciada na config mas não tem ROI desenhada.")
+
+    return errors
+
+
 def correr_programa(config):
     """Pipeline completo com tracking, métricas, dashboard e exportação Excel.
 
@@ -136,8 +157,18 @@ def correr_programa(config):
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
-    if not JsonRoiRepository(path=_ROI_PATH).load().all():
+    rois = JsonRoiRepository(path=_ROI_PATH).load()
+
+    if not rois.all():
         print("Nenhuma ROI definida. Usa a opção 2 primeiro.")
+        return
+
+    roi_names = {roi.name for roi in rois.all()}
+    errors    = _validate_config_vs_rois(config, roi_names)
+    if errors:
+        print("Erro: a config e as ROIs estão inconsistentes. Corrige antes de correr:")
+        for error in errors:
+            print(error)
         return
 
     frame_queue     = Queue(maxsize=2)

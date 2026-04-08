@@ -162,6 +162,10 @@ class TwoHandsStateMachine(StateMachineInterface):
 
     _prev_detections é um dict por HandSide para que cada mão tenha a sua
     referência de frame anterior independente no cálculo de velocidade.
+
+    WAITING_SECOND_HAND tem timeout igual a dwell_time: se a segunda mão não
+    chegar (ou uma mão ficar presa na zona sem a outra), a máquina regressa a
+    IDLE e desbloqueia o sistema. Ajustável via tracking.dwell_time_seconds.
     """
 
     def __init__(
@@ -179,6 +183,7 @@ class TwoHandsStateMachine(StateMachineInterface):
         self._task_state:      TaskState                      = TaskState.IDLE
         self._tracked_zone:    str | None                     = None
         self._prev_detections: dict[HandSide, HandDetection]  = {}
+        self._waiting_start:   datetime | None                = None
         self._dwell_start:     datetime | None                = None
         self._task_start:      datetime | None                = None
 
@@ -189,7 +194,7 @@ class TwoHandsStateMachine(StateMachineInterface):
         if self._task_state == TaskState.IDLE:
             return self._handle_idle(classified_hands)
         if self._task_state == TaskState.WAITING_SECOND_HAND:
-            return self._handle_waiting_second_hand(classified_hands)
+            return self._handle_waiting_second_hand(classified_hands, frame_time)
         if self._task_state == TaskState.DWELLING_TWO_HANDS:
             return self._handle_dwelling_two_hands(classified_hands, frame_time)
         if self._task_state == TaskState.TASK_IN_PROGRESS:
@@ -202,15 +207,28 @@ class TwoHandsStateMachine(StateMachineInterface):
                 continue
             self._tracked_zone    = zone.name
             self._prev_detections = {}
+            self._waiting_start   = None
             self._dwell_start     = None
             self._task_state      = TaskState.WAITING_SECOND_HAND
             return
 
-    def _handle_waiting_second_hand(self, classified_hands: list[ClassifiedHand]) -> None:
+    def _handle_waiting_second_hand(
+        self,
+        classified_hands: list[ClassifiedHand],
+        frame_time: datetime,
+    ) -> None:
         hands = self._hands_in_tracked_zone(classified_hands)
 
         if len(hands) == 0:
             # A primeira mão saiu antes da segunda chegar — recomeça do zero
+            self._reset_to_idle()
+            return
+
+        if self._waiting_start is None:
+            self._waiting_start = frame_time
+
+        if frame_time - self._waiting_start >= self._dwell_time:
+            # Segunda mão não chegou dentro do tempo de dwell — desbloqueia
             self._reset_to_idle()
             return
 
@@ -282,6 +300,7 @@ class TwoHandsStateMachine(StateMachineInterface):
         self._task_state      = TaskState.IDLE
         self._tracked_zone    = None
         self._prev_detections = {}
+        self._waiting_start   = None
         self._dwell_start     = None
         self._task_start      = None
 
@@ -356,11 +375,6 @@ class TaskStateMachine:
                 return self._active.update(filtered, frame_time)
 
         return None
-
-    def _machine_for(self, zone_name: str) -> StateMachineInterface:
-        if zone_name in self._two_hands_zones:
-            return self._two_hands
-        return self._one_hand
 
     def current_state(self) -> TaskState:
         if self._active is None:
