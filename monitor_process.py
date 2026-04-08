@@ -6,8 +6,10 @@
 # (OpenCV, MediaPipe) no processo pai sem necessidade.
 
 
-def run(detection_queue, stop_event, config, workbenches_dir, active_path):
-    _MonitorSession(config, workbenches_dir, active_path).execute(detection_queue, stop_event)
+def run(detection_queue, stop_event, config, workbenches_dir, active_path, projection_queue=None):
+    _MonitorSession(config, workbenches_dir, active_path).execute(
+        detection_queue, stop_event, projection_queue
+    )
 
 
 class _MonitorSession:
@@ -61,16 +63,18 @@ class _MonitorSession:
         self._dashboard_writer = DashboardWriter(Path(config["dashboard"]["data_path"]))
         self._excel_exporter   = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
 
-        self._prev_zones: dict[str, str | None] = {}
+        self._prev_zones:     dict[str, str | None] = {}
+        self._last_next_zone: str | None            = None
 
         one_hand  = OneHandStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
         two_hands = TwoHandsStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
         self._state_machine = TaskStateMachine(one_hand, two_hands, workbench.two_hands_zones)
 
-    def execute(self, detection_queue, stop_event) -> None:
+    def execute(self, detection_queue, stop_event, projection_queue=None) -> None:
         from pathlib import Path
         from src.events.debug_logger import DebugLogger
 
+        self._projection_queue = projection_queue
         output_dir = Path(self._config["output"]["excel_output_dir"])
         with DebugLogger(output_dir, self._session_start) as debug_logger:
             self._loop(detection_queue, stop_event, debug_logger)
@@ -114,6 +118,7 @@ class _MonitorSession:
             self._handle_task_event(task_event, debug_logger)
 
         self._maybe_refresh_dashboard(now)
+        self._maybe_update_projection()
 
         frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
         frame_annotator.draw_detections(frame_bgr, maos)
@@ -178,6 +183,15 @@ class _MonitorSession:
             debug_logger.log_task_timeout(task_event)
             return
         debug_logger.log_task_complete(task_event)
+
+    def _maybe_update_projection(self) -> None:
+        """Envia a próxima zona para o projetor quando esta muda."""
+        if self._projection_queue is None:
+            return
+        next_zone = self._cycle_tracker.next_zone()
+        if next_zone != self._last_next_zone:
+            self._projection_queue.put(next_zone)
+            self._last_next_zone = next_zone
 
     def _maybe_refresh_dashboard(self, now) -> None:
         from datetime import datetime

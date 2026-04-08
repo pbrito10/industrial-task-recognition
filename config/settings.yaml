@@ -50,3 +50,11 @@ dashboard:
 
 output:
   excel_output_dir: "output/"
+
+projector:
+  enabled: false                                      # true para ativar o guia projetado
+  resolution_width:  1920
+  resolution_height: 1080
+  display_offset_x:  1920                             # posição X do monitor do projetor
+  display_offset_y:  0
+  calibration_path:  "config/projection_calibration.json"

@@ -22,13 +22,15 @@ class SetupWizard:
 
     def __init__(
         self,
-        workbenches_dir: Path,
-        active_path:     Path,
-        camera_config:   dict,
+        workbenches_dir:  Path,
+        active_path:      Path,
+        camera_config:    dict,
+        projector_config: dict | None = None,
     ) -> None:
-        self._workbenches_dir = workbenches_dir
-        self._active_path     = active_path
-        self._camera_config   = camera_config
+        self._workbenches_dir  = workbenches_dir
+        self._active_path      = active_path
+        self._camera_config    = camera_config
+        self._projector_config = projector_config or {}
 
     # ------------------------------------------------------------------
     # Menu principal
@@ -45,6 +47,7 @@ class SetupWizard:
             print("  2. Criar novo perfil")
             print("  3. Editar perfil ativo")
             print("  4. Apagar perfil")
+            print("  5. Calibrar Projetor")
             print("  0. Voltar")
 
             raw = input("\n  > ").strip()
@@ -59,6 +62,8 @@ class SetupWizard:
                 self._menu_edit(active)
             elif raw == "4":
                 self._menu_delete(profiles, active)
+            elif raw == "5":
+                self._menu_calibrate_projector()
             else:
                 print("  Opção inválida.")
 
@@ -144,6 +149,40 @@ class SetupWizard:
         if roi_file.exists():
             roi_file.unlink()
         print(f"  Perfil '{name}' apagado.")
+
+    # ------------------------------------------------------------------
+    # Calibração do projetor
+    # ------------------------------------------------------------------
+
+    def _menu_calibrate_projector(self) -> None:
+        from pathlib import Path
+        from src.projection.calibration import run_calibration
+
+        proj = self._projector_config
+        if not proj:
+            print("\n  Projetor não configurado em settings.yaml (secção 'projector').")
+            return
+
+        print("\n=== Calibrar Projetor ===")
+        print("  O projetor vai mostrar 4 círculos verdes nos cantos da bancada.")
+        print("  A câmara deteta-os automaticamente e calcula a homografia.")
+        input("  Pressiona Enter para iniciar (ou Ctrl+C para cancelar)...")
+
+        ok = run_calibration(
+            camera_index      = self._camera_config["index"],
+            camera_width      = self._camera_config["width"],
+            camera_height     = self._camera_config["height"],
+            projector_width   = proj["resolution_width"],
+            projector_height  = proj["resolution_height"],
+            display_offset_x  = proj["display_offset_x"],
+            display_offset_y  = proj["display_offset_y"],
+            calibration_path  = Path(proj["calibration_path"]),
+        )
+
+        if ok:
+            print("  Projetor calibrado com sucesso.")
+        else:
+            print("  Calibração falhou. Verifica o projetor e tenta novamente.")
 
     # ------------------------------------------------------------------
     # Os 6 passos de configuração

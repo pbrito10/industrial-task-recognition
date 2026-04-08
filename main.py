@@ -39,9 +39,14 @@ def run_display(detection_queue, stop_event):
     display_process.run(detection_queue, stop_event)
 
 
-def run_pipeline(detection_queue, stop_event, config, workbenches_dir, active_path):
+def run_pipeline(detection_queue, stop_event, config, workbenches_dir, active_path, projection_queue=None):
     import monitor_process
-    monitor_process.run(detection_queue, stop_event, config, workbenches_dir, active_path)
+    monitor_process.run(detection_queue, stop_event, config, workbenches_dir, active_path, projection_queue)
+
+
+def run_projection(projection_queue, stop_event, config, workbenches_dir, active_path):
+    import projection_process
+    projection_process.run(projection_queue, stop_event, config, workbenches_dir, active_path)
 
 
 def _start_processes(processos: dict) -> None:
@@ -127,17 +132,28 @@ def correr_programa(config):
         stderr=subprocess.DEVNULL,
     )
 
-    try:
-        _launch(
-            stop_event,
-            camera   = Process(target=run_camera,   name="camera",
-                               args=(frame_queue, stop_event, config)),
-            detector = Process(target=run_detector, name="detector",
-                               args=(frame_queue, detection_queue, stop_event, config)),
-            pipeline = Process(target=run_pipeline, name="pipeline",
-                               args=(detection_queue, stop_event, config,
-                                     str(_WORKBENCHES_DIR), str(_ACTIVE_PATH))),
+    proj_enabled    = config.get("projector", {}).get("enabled", False)
+    projection_queue = Queue(maxsize=10) if proj_enabled else None
+
+    processos = dict(
+        camera   = Process(target=run_camera,   name="camera",
+                           args=(frame_queue, stop_event, config)),
+        detector = Process(target=run_detector, name="detector",
+                           args=(frame_queue, detection_queue, stop_event, config)),
+        pipeline = Process(target=run_pipeline, name="pipeline",
+                           args=(detection_queue, stop_event, config,
+                                 str(_WORKBENCHES_DIR), str(_ACTIVE_PATH), projection_queue)),
+    )
+
+    if proj_enabled:
+        processos["projector"] = Process(
+            target=run_projection, name="projector",
+            args=(projection_queue, stop_event, config,
+                  str(_WORKBENCHES_DIR), str(_ACTIVE_PATH)),
         )
+
+    try:
+        _launch(stop_event, **processos)
     finally:
         dashboard_proc.terminate()
 
@@ -150,6 +166,7 @@ def configurar_bancada(config):
         workbenches_dir=_WORKBENCHES_DIR,
         active_path=_ACTIVE_PATH,
         camera_config=config["camera"],
+        projector_config=config.get("projector"),
     ).run()
 
 

@@ -85,6 +85,41 @@ class CycleTracker:
         """Número do ciclo em curso (começa em 1)."""
         return self._completed_cycles + 1
 
+    def next_zone(self) -> str | None:
+        """Devolve a próxima zona esperada na sequência do ciclo.
+
+        Antes do ciclo começar devolve a zona de início.
+        Durante o ciclo avança o ponteiro pela ordem esperada com base nas
+        tarefas já concluídas (exclui was_forced).
+        Devolve None quando a sequência está completa ou indeterminada.
+        """
+        if not self._cycle_started:
+            return self._start_zone
+
+        expected = self._expected_order
+        if not expected:
+            return None
+
+        # Replica o algoritmo de ponteiro do _matches_order para encontrar
+        # a última zona concluída e inferir qual é a próxima.
+        actual = [t.zone_name for t in self._tasks_in_cycle if not t.was_forced]
+
+        ptr = 0
+        for zone in actual:
+            if zone == expected[ptr]:
+                continue
+            if ptr + 1 < len(expected) and zone == expected[ptr + 1]:
+                ptr += 1
+                continue
+            # Sequência fora de ordem — posição indeterminada
+            return None
+
+        # ptr aponta para a última zona concluída; a seguinte é ptr+1
+        if ptr + 1 < len(expected):
+            return expected[ptr + 1]
+
+        return None  # ciclo completo, aguarda próximo início
+
     def _is_cycle_complete(self, event: TaskEvent) -> bool:
         return event.zone_name == self._exit_zone and not event.was_forced
 
