@@ -199,7 +199,9 @@ class _MonitorSession:
 
         import queue
         current = self._state_machine.current_tracked_zone()
-        nxt     = self._cycle_tracker.next_zone()
+        # projection_target devolve a zona SEGUINTE à atual quando o operador
+        # já está na zona certa — assim a seta aparece imediatamente ao entrar
+        nxt     = self._cycle_tracker.projection_target(current)
         pair    = (current, nxt)
 
         if pair != self._last_next_zone:

@@ -16,13 +16,15 @@ import numpy as np
 from src.projection.homography import transform_roi
 from src.roi.roi_collection import RoiCollection
 
-# Zona atual — verde visível em bancada branca
+# Zona atual (operador presente) — verde visível em bancada branca
 _COLOR_BGR    = (0, 220, 0)
 _BORDER_THICK = 8
 # Seta para a zona seguinte — branco para contrastar com o verde
 _ARROW_COLOR_BGR = (255, 255, 255)
 _ARROW_THICK     = 6
 _ARROW_TIP_FRAC  = 0.05   # comprimento da ponta como fracção do comprimento total
+# Próxima zona (operador fora de qualquer zona) — amarelo forte
+_NEXT_COLOR_BGR = (0, 220, 255)
 
 _PULSE_HZ  = 1.5   # frequência de pulsação (Hz)
 _FILL_MIN  = 0.15  # alpha mínimo do fill
@@ -59,17 +61,17 @@ class ProjectorRenderer:
         A seta só é desenhada se next_zone existir e for diferente de current_zone.
         """
         frame = np.zeros((self._height, self._width, 3), dtype=np.uint8)
+        alpha = self._pulse_alpha()
 
         if current_zone is None:
-            return frame
+            # Operador fora de qualquer zona: destaca a zona seguinte em amarelo
+            return self._render_next_only(frame, next_zone, alpha)
 
         tl, br = self._zone_bounds(current_zone)
         if tl is None:
             return frame
 
-        alpha = self._pulse_alpha()
-
-        # --- overlay: fill da zona atual + seta (ambos pulsam juntos) ---
+        # --- overlay: fill da zona atual + seta para a seguinte (pulsam juntos) ---
         overlay = frame.copy()
         cv2.rectangle(overlay, tl, br, _COLOR_BGR, -1)
 
@@ -93,6 +95,29 @@ class ProjectorRenderer:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _render_next_only(
+        self,
+        frame: np.ndarray,
+        next_zone: Optional[str],
+        alpha: float,
+    ) -> np.ndarray:
+        """Renderiza apenas a zona seguinte (amarelo pulsante) quando o operador
+        não está em nenhuma zona — guia para onde deve ir a seguir."""
+        if next_zone is None:
+            return frame
+
+        tl, br = self._zone_bounds(next_zone)
+        if tl is None:
+            return frame
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, tl, br, _NEXT_COLOR_BGR, -1)
+        cv2.addWeighted(overlay, alpha, frame, 1.0 - alpha, 0, frame)
+
+        cv2.rectangle(frame, tl, br, _NEXT_COLOR_BGR, _BORDER_THICK)
+        self._draw_label(frame, next_zone, tl, br, color=_NEXT_COLOR_BGR)
+        return frame
 
     def _pulse_alpha(self) -> float:
         return _FILL_MIN + (_FILL_MAX - _FILL_MIN) * (
@@ -138,10 +163,11 @@ class ProjectorRenderer:
         text:  str,
         tl:    tuple[int, int],
         br:    tuple[int, int],
+        color: tuple[int, int, int] = _COLOR_BGR,
     ) -> None:
         """Nome da zona centrado dentro do retângulo."""
         (tw, th), _ = cv2.getTextSize(text, _FONT, _FONT_SCALE, _FONT_THICK)
         cx  = (tl[0] + br[0]) // 2
         cy  = (tl[1] + br[1]) // 2
         org = (cx - tw // 2, cy + th // 2)
-        cv2.putText(frame, text, org, _FONT, _FONT_SCALE, _COLOR_BGR, _FONT_THICK)
+        cv2.putText(frame, text, org, _FONT, _FONT_SCALE, color, _FONT_THICK)
