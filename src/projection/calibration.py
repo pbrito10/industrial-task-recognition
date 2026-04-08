@@ -50,8 +50,17 @@ def _generate_marker(size: int) -> np.ndarray:
     return cv2.bitwise_not(marker)
 
 
+def _sort_corners_tl_tr_br_bl(pts: np.ndarray) -> np.ndarray:
+    """Ordena 4 pontos em [TL, TR, BR, BL] independentemente da ordem de deteção."""
+    by_y   = pts[np.argsort(pts[:, 1])]
+    top    = by_y[:2][np.argsort(by_y[:2, 0])]    # os 2 com menor y, ordenados por x
+    bottom = by_y[2:][np.argsort(by_y[2:, 0])]    # os 2 com maior y, ordenados por x
+    return np.array([top[0], top[1], bottom[1], bottom[0]], dtype=np.float64)
+    #                TL       TR       BR          BL
+
+
 def _detect_marker_corners(frame_bgr: np.ndarray) -> np.ndarray | None:
-    """Deteta o marcador e devolve os 4 cantos em coordenadas da câmara, ou None."""
+    """Deteta o marcador e devolve os 4 cantos ordenados [TL,TR,BR,BL], ou None."""
     dictionary = cv2.aruco.getPredefinedDictionary(_DICT_ID)
     params     = cv2.aruco.DetectorParameters()
     params.detectInvertedMarker = True   # deteta marcadores com cores invertidas
@@ -63,8 +72,8 @@ def _detect_marker_corners(frame_bgr: np.ndarray) -> np.ndarray | None:
 
     for i, marker_id in enumerate(ids.flatten()):
         if marker_id == _MARKER_ID:
-            # corners[i] tem shape (1, 4, 2) — remove a dimensão exterior
-            return corners[i][0].astype(np.float64)
+            raw = corners[i][0].astype(np.float64)
+            return _sort_corners_tl_tr_br_bl(raw)
 
     return None
 
