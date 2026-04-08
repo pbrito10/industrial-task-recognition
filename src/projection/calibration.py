@@ -109,13 +109,17 @@ def run_calibration(
     # Ordem obrigatória: imshow primeiro (cria a janela), depois move e fullscreen.
     # O event loop do OpenCV depende de waitKey para renderizar — time.sleep sozinho
     # congela a janela antes de aparecer no projetor.
+    # WINDOW_FULLSCREEN é ignorado por muitos window managers Linux quando a janela
+    # está noutro monitor. Usa-se WINDOW_NORMAL + moveWindow + resizeWindow, que
+    # funciona independentemente do compositor.
     win = "Calibracao_Projetor"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
     cv2.imshow(win, _build_projector_frame(projector_width, projector_height))
-    cv2.waitKey(200)                                          # renderiza a janela
-    cv2.moveWindow(win, display_offset_x, display_offset_y)  # move para o projetor
-    cv2.waitKey(200)                                          # gestor de janelas processa o move
-    cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.waitKey(200)
+    cv2.moveWindow(win, display_offset_x, display_offset_y)
+    cv2.waitKey(200)
+    cv2.resizeWindow(win, projector_width, projector_height)
+    print(f"  [debug] janela em ({display_offset_x}, {display_offset_y}), {projector_width}×{projector_height}")
 
     # Mantém o event loop vivo durante a estabilização (waitKey em vez de sleep)
     n_ticks = stabilization_seconds * 5  # 200 ms por tick

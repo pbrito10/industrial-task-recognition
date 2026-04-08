@@ -55,7 +55,7 @@ class _ProjectionSession:
         cv2.waitKey(200)
         cv2.moveWindow(win, self._offset_x, self._offset_y)
         cv2.waitKey(200)
-        cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.resizeWindow(win, self._width, self._height)
         cv2.waitKey(200)
 
         active_zone: str | None = None
