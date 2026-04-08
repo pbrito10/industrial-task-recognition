@@ -97,8 +97,8 @@ def run_calibration(
 
     # --- Projeta os markers ArUco via tkinter ---
     root = tk.Tk()
+    root.wm_attributes('-type', 'splash')
     root.geometry(f"{projector_width}x{projector_height}+{display_offset_x}+{display_offset_y}")
-    root.overrideredirect(True)
     root.configure(bg="black")
 
     canvas = tk.Canvas(root, width=projector_width, height=projector_height,
@@ -113,6 +113,12 @@ def run_calibration(
         photo_refs.append(photo)
         canvas.create_image(cx - half, cy - half, anchor="nw", image=photo)
 
+    # Abre a câmara antes de projetar para que esteja pronta quando os markers
+    # aparecerem — a captura acontece COM os markers ainda projetados.
+    cap = cv2.VideoCapture(camera_index)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  camera_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
+
     root.update()
     print(f"  Markers ArUco projetados. A aguardar estabilização ({stabilization_seconds}s)...")
 
@@ -121,13 +127,7 @@ def run_calibration(
         root.update()
         time.sleep(0.05)
 
-    root.destroy()
-
-    # --- Captura e deteta ---
-    cap = cv2.VideoCapture(camera_index)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  camera_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
-
+    # --- Captura com markers ainda projetados ---
     found = None
     for _ in range(15):
         ret, frame = cap.read()
@@ -140,6 +140,7 @@ def run_calibration(
         time.sleep(0.15)
 
     cap.release()
+    root.destroy()
 
     if found is None:
         print(

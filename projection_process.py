@@ -50,11 +50,12 @@ class _ProjectionSession:
         import cv2
         from PIL import Image, ImageTk
 
-        # tkinter com overrideredirect garante posicionamento correto em qualquer
-        # monitor sem interferência do compositor/window manager.
+        # '-type splash' diz ao WM para não dar foco nem decorações a esta janela
+        # e respeita a geometria fornecida — ao contrário de overrideredirect,
+        # não bloqueia eventos de teclado/rato nos outros monitores.
         root = tk.Tk()
+        root.wm_attributes('-type', 'splash')
         root.geometry(f"{self._width}x{self._height}+{self._offset_x}+{self._offset_y}")
-        root.overrideredirect(True)
         root.configure(bg="black")
 
         label = tk.Label(root, bg="black", borderwidth=0)
