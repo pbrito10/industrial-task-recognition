@@ -111,11 +111,13 @@ def run_calibration(
 
     # --- Captura com o marcador ainda projetado ---
     cam_corners = None
+    last_frame  = None
     for _ in range(15):
         ret, frame = cap.read()
         if not ret:
             time.sleep(0.1)
             continue
+        last_frame  = frame
         cam_corners = _detect_marker_corners(frame)
         if cam_corners is not None:
             break
@@ -124,10 +126,21 @@ def run_calibration(
     cap.release()
     root.destroy()
 
+    # Guarda o último frame capturado para diagnóstico (visível mesmo em caso de falha)
+    if last_frame is not None:
+        debug_path = calibration_path.parent / "calibration_debug.jpg"
+        # Desenha os cantos detetados se existirem
+        debug_frame = last_frame.copy()
+        if cam_corners is not None:
+            for pt in cam_corners.astype(int):
+                cv2.circle(debug_frame, tuple(pt), 8, (0, 255, 0), -1)
+        cv2.imwrite(str(debug_path), debug_frame)
+        print(f"  Frame de diagnóstico guardado em: {debug_path}")
+
     if cam_corners is None:
         print(
             "  Erro: marcador ArUco não detetado na câmara.\n"
-            "  Verifica se o projetor está ligado e o marcador está numa zona plana."
+            "  Verifica o frame de diagnóstico para ver o que a câmara está a capturar."
         )
         return False
 
