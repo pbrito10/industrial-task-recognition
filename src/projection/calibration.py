@@ -39,15 +39,23 @@ def _marker_corners_projector(width: int, height: int) -> np.ndarray:
 
 
 def _generate_marker(size: int) -> np.ndarray:
-    """Gera imagem do marcador ArUco em escala de cinzentos."""
+    """Gera imagem do marcador ArUco invertida (branco em fundo preto).
+
+    Projetado numa bancada branca, o fundo preto (sem luz) dá contraste
+    suficiente para a câmara distinguir o padrão — ao contrário do marcador
+    standard (fundo branco) que se perde na superfície branca.
+    """
     dictionary = cv2.aruco.getPredefinedDictionary(_DICT_ID)
-    return cv2.aruco.generateImageMarker(dictionary, _MARKER_ID, size)
+    marker     = cv2.aruco.generateImageMarker(dictionary, _MARKER_ID, size)
+    return cv2.bitwise_not(marker)
 
 
 def _detect_marker_corners(frame_bgr: np.ndarray) -> np.ndarray | None:
     """Deteta o marcador e devolve os 4 cantos em coordenadas da câmara, ou None."""
     dictionary = cv2.aruco.getPredefinedDictionary(_DICT_ID)
-    detector   = cv2.aruco.ArucoDetector(dictionary, cv2.aruco.DetectorParameters())
+    params     = cv2.aruco.DetectorParameters()
+    params.detectInvertedMarker = True   # deteta marcadores com cores invertidas
+    detector   = cv2.aruco.ArucoDetector(dictionary, params)
     corners, ids, _ = detector.detectMarkers(frame_bgr)
 
     if ids is None:
