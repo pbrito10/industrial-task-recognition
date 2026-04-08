@@ -91,7 +91,10 @@ def run_calibration(
 
     # --- Projeta o marcador centrado via tkinter ---
     root = tk.Tk()
-    root.wm_attributes('-type', 'splash')
+    try:
+        root.wm_attributes('-type', 'splash')
+    except tk.TclError:
+        root.overrideredirect(True)
     root.geometry(f"{projector_width}x{projector_height}+{display_offset_x}+{display_offset_y}")
     root.configure(bg="black")
 

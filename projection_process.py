@@ -10,9 +10,14 @@
 
 
 def run(projection_queue, stop_event, config, workbenches_dir, active_path):
-    _ProjectionSession(config, workbenches_dir, active_path).execute(
-        projection_queue, stop_event
-    )
+    try:
+        _ProjectionSession(config, workbenches_dir, active_path).execute(
+            projection_queue, stop_event
+        )
+    except Exception as exc:
+        import traceback
+        print(f"[projector] ERRO: {exc}")
+        traceback.print_exc()
 
 
 class _ProjectionSession:
@@ -50,11 +55,13 @@ class _ProjectionSession:
         import cv2
         from PIL import Image, ImageTk
 
-        # '-type splash' diz ao WM para não dar foco nem decorações a esta janela
-        # e respeita a geometria fornecida — ao contrário de overrideredirect,
-        # não bloqueia eventos de teclado/rato nos outros monitores.
         root = tk.Tk()
-        root.wm_attributes('-type', 'splash')
+        try:
+            # Evita que a janela roube foco ou bloqueie input nos outros monitores.
+            # Nem todos os WMs suportam este atributo — o fallback é overrideredirect.
+            root.wm_attributes('-type', 'splash')
+        except tk.TclError:
+            root.overrideredirect(True)
         root.geometry(f"{self._width}x{self._height}+{self._offset_x}+{self._offset_y}")
         root.configure(bg="black")
 
