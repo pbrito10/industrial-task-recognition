@@ -16,11 +16,16 @@ Uso posterior no pipeline:
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+# Garante que o DISPLAY está definido quando o script é corrido fora de uma sessão gráfica
+if not os.environ.get("DISPLAY"):
+    os.environ["DISPLAY"] = ":0"
 
 # --- Configuração ---
 CAMERA_INDEX: int = 0
