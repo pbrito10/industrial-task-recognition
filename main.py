@@ -111,14 +111,7 @@ def definir_rois(config):
     from src.roi.roi_drawer import RoiDrawer
     from src.video.camera import Camera
 
-    camera_factory = lambda: Camera(
-        index=config["camera"]["index"],
-        width=config["camera"]["width"],
-        height=config["camera"]["height"],
-        calibration_path=config["camera"].get("calibration_path"),
-        perspective_path=config["camera"].get("perspective_path"),
-        flip=config["camera"].get("flip", False),
-    )
+    camera_factory = lambda: Camera.from_config(config["camera"])
 
     repository = JsonRoiRepository(path=_ROI_PATH)
     drawer     = RoiDrawer(

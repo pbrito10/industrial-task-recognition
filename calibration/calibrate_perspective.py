@@ -23,10 +23,13 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import yaml
 
 # Quando em SSH, força o display físico da máquina remota
 if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":0"
+
+_SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
 
 # --- Configuração ---
 CAMERA_INDEX: int = 0
@@ -162,6 +165,10 @@ def _on_mouse_click(event: int, x: int, y: int, _flags: int, _param) -> None:
 def main() -> None:
     global _src_points
 
+    with open(_SETTINGS_PATH) as f:
+        _settings = yaml.safe_load(f)
+    _flip: bool = _settings["camera"].get("flip", False)
+
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
         print(f"Erro: não foi possível abrir a câmara {CAMERA_INDEX}.")
@@ -191,8 +198,9 @@ def main() -> None:
             print("Erro a ler frame da câmara.")
             break
 
-        # Aplica o mesmo flip do pipeline para que os pontos clicados sejam consistentes
-        frame = cv2.flip(frame, -1)
+        # Aplica o mesmo flip do pipeline (lido de settings.yaml) para consistência
+        if _flip:
+            frame = cv2.flip(frame, -1)
 
         # Sincroniza pontos clicados (lista global) com o calibrador
         while len(_src_points) > calibrator.point_count:

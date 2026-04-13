@@ -18,14 +18,7 @@ def run(frame_queue, stop_event, config):
 
     from src.video.camera import Camera
 
-    camera = Camera(
-        index=config["camera"]["index"],
-        width=config["camera"]["width"],
-        height=config["camera"]["height"],
-        calibration_path=config["camera"].get("calibration_path"),
-        perspective_path=config["camera"].get("perspective_path"),
-        flip=config["camera"].get("flip", False),
-    )
+    camera = Camera.from_config(config["camera"])
 
     try:
         while not stop_event.is_set():

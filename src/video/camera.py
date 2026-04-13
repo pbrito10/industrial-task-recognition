@@ -51,6 +51,18 @@ class Camera:
                 self._perspective_M = data["M"]
                 self._perspective_size = tuple(data["output_size"].tolist())
 
+    @classmethod
+    def from_config(cls, config: dict) -> "Camera":
+        """Constrói uma Camera a partir do dicionário camera: do settings.yaml."""
+        return cls(
+            index=config["index"],
+            width=config["width"],
+            height=config["height"],
+            calibration_path=config.get("calibration_path"),
+            perspective_path=config.get("perspective_path"),
+            flip=config.get("flip", False),
+        )
+
     def read_frame(self) -> np.ndarray | None:
         """Lê o próximo frame, aplicando correções de lente e perspetiva se disponíveis.
         Devolve None se a câmara falhou ou terminou."""
