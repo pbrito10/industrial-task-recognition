@@ -109,6 +109,8 @@ def definir_rois(config):
         index=config["camera"]["index"],
         width=config["camera"]["width"],
         height=config["camera"]["height"],
+        calibration_path=config["camera"].get("calibration_path"),
+        perspective_path=config["camera"].get("perspective_path"),
     )
 
     repository = JsonRoiRepository(path=_ROI_PATH)

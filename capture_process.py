@@ -18,6 +18,8 @@ def run(frame_queue, stop_event, config):
         index=config["camera"]["index"],
         width=config["camera"]["width"],
         height=config["camera"]["height"],
+        calibration_path=config["camera"].get("calibration_path"),
+        perspective_path=config["camera"].get("perspective_path"),
     )
 
     try:
