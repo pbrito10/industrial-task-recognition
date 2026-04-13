@@ -20,6 +20,7 @@ def run(frame_queue, stop_event, config):
         height=config["camera"]["height"],
         calibration_path=config["camera"].get("calibration_path"),
         perspective_path=config["camera"].get("perspective_path"),
+        flip=config["camera"].get("flip", False),
     )
 
     try:
@@ -31,7 +32,6 @@ def run(frame_queue, stop_event, config):
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_rgb = cv2.flip(frame_rgb, -1)
 
             if frame_queue.full():
                 try:

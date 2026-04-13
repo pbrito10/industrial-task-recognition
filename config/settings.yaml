@@ -5,6 +5,7 @@ camera:
   index: 0              # índice da câmara USB (0=primeira, 1=segunda, ...)
   width: 640
   height: 480
+  flip: true                                                         # true para rodar 180° (câmara invertida)
   calibration_path: "calibration/data/lens_calibration.npz"        # deixar vazio para desativar
   perspective_path: "calibration/data/perspective_calibration.npz" # deixar vazio para desativar
 
