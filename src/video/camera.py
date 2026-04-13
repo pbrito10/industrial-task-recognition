@@ -30,14 +30,19 @@ class Camera:
         self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
-        # Parâmetros intrínsecos para correção de distorção de lente
-        self._K: np.ndarray | None = None
-        self._dist: np.ndarray | None = None
+        # Mapas pré-calculados para undistortion eficiente por frame (initUndistortRectifyMap)
+        # Calculados uma vez no construtor; remap() aplica-os sem recalcular a cada frame
+        self._undistort_maps: tuple[np.ndarray, np.ndarray] | None = None
         if calibration_path:
             path = Path(calibration_path)
             if path.exists():
                 data = np.load(str(path))
-                self._K, self._dist = data["K"], data["dist"]
+                K, dist = data["K"], data["dist"]
+                # newcameramtx guardado pelo calibrate_lens atual; fallback para K em ficheiros antigos
+                newcameramtx = data["newcameramtx"] if "newcameramtx" in data else K
+                self._undistort_maps = cv2.initUndistortRectifyMap(
+                    K, dist, None, newcameramtx, (width, height), cv2.CV_32FC1
+                )
 
         self._flip = flip
 
@@ -70,8 +75,8 @@ class Camera:
         if not success:
             return None
         # Lente → flip → perspetiva (ordem importante para calibração consistente)
-        if self._K is not None:
-            frame = cv2.undistort(frame, self._K, self._dist)
+        if self._undistort_maps is not None:
+            frame = cv2.remap(frame, *self._undistort_maps, cv2.INTER_LINEAR)
         if self._flip:
             frame = cv2.flip(frame, -1)
         if self._perspective_M is not None:

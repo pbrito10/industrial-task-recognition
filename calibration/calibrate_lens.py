@@ -96,33 +96,72 @@ class LensCalibrator:
         if self.capture_count < MIN_CAPTURES:
             raise ValueError(f"São necessárias pelo menos {MIN_CAPTURES} capturas.")
 
-        rms, K, dist, _, _ = cv2.calibrateCamera(
+        rms, K, dist, rvecs, tvecs = cv2.calibrateCamera(
             self._obj_pts,
             self._img_pts,
             image_size,
             None,
             None,
         )
-        return CalibrationResult(camera_matrix=K, dist_coeffs=dist, rms=rms)
+
+        # Refina a matriz intrínseca com alpha=1 (retém todos os píxeis; sem crop)
+        w, h = image_size
+        newcameramtx, roi = cv2.getOptimalNewCameraMatrix(K, dist, (w, h), 1, (w, h))
+
+        # Erro de reprojeção por imagem — quanto mais próximo de 0, melhor
+        per_image_errors = []
+        for i in range(len(self._obj_pts)):
+            imgpoints2, _ = cv2.projectPoints(self._obj_pts[i], rvecs[i], tvecs[i], K, dist)
+            error = cv2.norm(self._img_pts[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
+            per_image_errors.append(error)
+
+        return CalibrationResult(
+            camera_matrix=K,
+            dist_coeffs=dist,
+            rms=rms,
+            new_camera_matrix=newcameramtx,
+            roi=roi,
+            per_image_errors=per_image_errors,
+        )
 
 
 class CalibrationResult:
-    """Encapsula a matriz intrínseca, coeficientes de distorção e erro de reprojeção."""
+    """Encapsula os parâmetros intrínsecos, distorção, matriz refinada e erros de reprojeção."""
 
-    def __init__(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray, rms: float) -> None:
-        self.camera_matrix = camera_matrix  # K: focal lengths + ponto principal
-        self.dist_coeffs = dist_coeffs      # [k1, k2, p1, p2, k3]
-        self.rms = rms                       # erro de reprojeção em píxeis
+    def __init__(
+        self,
+        camera_matrix: np.ndarray,
+        dist_coeffs: np.ndarray,
+        rms: float,
+        new_camera_matrix: np.ndarray,
+        roi: tuple[int, int, int, int],
+        per_image_errors: list[float],
+    ) -> None:
+        self.camera_matrix = camera_matrix      # K original: focal lengths + ponto principal
+        self.dist_coeffs = dist_coeffs          # [k1, k2, p1, p2, k3]
+        self.rms = rms                           # erro de reprojeção médio em píxeis
+        self.new_camera_matrix = new_camera_matrix  # K refinado por getOptimalNewCameraMatrix
+        self.roi = roi                           # (x, y, w, h) — região válida após undistortion
+        self.per_image_errors = per_image_errors
 
     def save(self, path: Path) -> None:
         """Grava os parâmetros em .npz. Cria as pastas intermédias se necessário."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(str(path), K=self.camera_matrix, dist=self.dist_coeffs)
+        np.savez(
+            str(path),
+            K=self.camera_matrix,
+            dist=self.dist_coeffs,
+            newcameramtx=self.new_camera_matrix,
+            roi=np.array(self.roi),
+        )
         print(f"\nCalibração guardada em: {path}")
-        print(f"Erro de reprojeção (RMS): {self.rms:.4f} px")
+        print(f"Erro de reprojeção (RMS total): {self.rms:.4f} px")
+        print("\nErro por imagem:")
+        for i, err in enumerate(self.per_image_errors):
+            print(f"  Imagem {i + 1:2d}: {err:.4f} px")
         # Valores > 1 px indicam que as imagens capturadas podem ter má qualidade
         if self.rms > 1.0:
-            print("AVISO: RMS > 1 px — considera capturar mais imagens ou verificar o checkerboard.")
+            print("\nAVISO: RMS > 1 px — considera capturar mais imagens ou verificar o checkerboard.")
 
 
 def _draw_hud(frame: np.ndarray, count: int, detected: bool) -> None:
