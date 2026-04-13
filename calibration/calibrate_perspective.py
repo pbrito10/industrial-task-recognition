@@ -17,9 +17,10 @@ Uso posterior no pipeline:
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-import os
+
 import cv2
 import numpy as np
 
@@ -40,6 +41,9 @@ OUTPUT_PATH: Path = Path(__file__).parent / "data" / "perspective_calibration.np
 # Ordem de clique: Superior-Esquerdo → Superior-Direito → Inferior-Direito → Inferior-Esquerdo
 _LABELS = ["Sup-Esq", "Sup-Dir", "Inf-Dir", "Inf-Esq"]
 _COLORS = [(0, 255, 0), (255, 128, 0), (0, 0, 255), (255, 0, 255)]
+
+# Lista global de pontos clicados — evita passar objetos Python como param ao Qt
+_src_points: list[tuple[int, int]] = []
 
 
 def _compute_output_height() -> int:
@@ -149,13 +153,15 @@ def _draw_hud(frame: np.ndarray, calibrator: PerspectiveCalibrator) -> None:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
 
 
-def _on_mouse_click(event: int, x: int, y: int, _flags: int, calibrator: PerspectiveCalibrator) -> None:
-    """Callback de rato: regista um ponto por cada clique esquerdo."""
-    if event == cv2.EVENT_LBUTTONDOWN:
-        calibrator.add_point(x, y)
+def _on_mouse_click(event: int, x: int, y: int, _flags: int, _param) -> None:
+    """Callback de rato: regista cliques esquerdos na lista global _src_points."""
+    if event == cv2.EVENT_LBUTTONDOWN and len(_src_points) < 4:
+        _src_points.append((x, y))
 
 
 def main() -> None:
+    global _src_points
+
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
         print(f"Erro: não foi possível abrir a câmara {CAMERA_INDEX}.")
@@ -164,18 +170,13 @@ def main() -> None:
     output_size = (OUTPUT_WIDTH_PX, _compute_output_height())
     calibrator = PerspectiveCalibrator(output_size)
     current_result: PerspectiveResult | None = None
+    callback_registered = False
 
-    window_main = "Calibração de Perspetiva — Clica 4 cantos"
-    window_preview = "Preview — Vista Corrigida"
+    window_main    = "Calibracao de Perspetiva"
+    window_preview = "Preview Corrigido"
 
     cv2.namedWindow(window_main, cv2.WINDOW_NORMAL)
-     # Mostra um frame inicial para garantir que a janela está criada antes do callback
-    ok, frame = cap.read()
-    if ok:
-        cv2.imshow(window_main, frame)
-        cv2.waitKey(1)
-    cv2.setMouseCallback(window_main, _on_mouse_click, calibrator)
-    
+
     print("=== Calibração de Perspetiva ===")
     print(f"Retângulo de referência: {REFERENCE_WIDTH_MM} mm × {REFERENCE_HEIGHT_MM} mm")
     print(f"Imagem de saída: {output_size[0]}×{output_size[1]} px\n")
@@ -190,11 +191,20 @@ def main() -> None:
             print("Erro a ler frame da câmara.")
             break
 
+        # Sincroniza pontos clicados (lista global) com o calibrador
+        while len(_src_points) > calibrator.point_count:
+            x, y = _src_points[calibrator.point_count]
+            calibrator.add_point(x, y)
+
         display = frame.copy()
         _draw_hud(display, calibrator)
         cv2.imshow(window_main, display)
 
-        # Atualiza preview em tempo real quando os 4 pontos estão definidos
+        # Regista o callback só após o primeiro imshow — garante que a janela existe no Qt
+        if not callback_registered:
+            cv2.setMouseCallback(window_main, _on_mouse_click)
+            callback_registered = True
+
         if calibrator.is_complete:
             current_result = calibrator.compute()
             warped = current_result.apply(frame)
@@ -208,6 +218,7 @@ def main() -> None:
 
         if key in (ord('r'), ord('R')):
             calibrator.reset()
+            _src_points.clear()
             current_result = None
             cv2.destroyWindow(window_preview)
             print("Pontos limpos. Seleciona novamente.")
