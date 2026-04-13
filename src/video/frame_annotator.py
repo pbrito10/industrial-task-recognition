@@ -62,6 +62,11 @@ def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
     _draw_skeleton(frame, detection.keypoints, color)
     _draw_keypoints(frame, detection.keypoints, color)
 
+    # Label ancorada ao pulso (landmark 0)
+    wrist = detection.keypoints.by_index(0).position
+    label = f"{detection.hand_side.value}  {detection.confidence.as_percentage():.0f}%"
+    cv2.putText(frame, label, (wrist.x, wrist.y - 10), _FONT, 0.5, color, 1)
+
 
 def draw_detections(frame: np.ndarray, detections: list[HandDetection]) -> None:
     for detection in detections:
