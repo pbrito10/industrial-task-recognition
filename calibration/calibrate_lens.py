@@ -147,7 +147,8 @@ def main() -> None:
     calibrator = LensCalibrator(CHECKERBOARD_SIZE, SQUARE_SIZE_MM)
     image_size: tuple[int, int] | None = None
     calibrated = False
-
+    #Cria a janela explicitamente
+    cv2.namedWindow("Calibração de Lente", cv2.WINDOW_NORMAL)
     print("=== Calibração de Lente ===")
     print(f"Checkerboard: {CHECKERBOARD_SIZE[0]}x{CHECKERBOARD_SIZE[1]} cantos internos")
     print(f"Quadrado: {SQUARE_SIZE_MM} mm | Capturas necessárias: {MIN_CAPTURES}\n")
