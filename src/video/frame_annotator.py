@@ -10,7 +10,6 @@ import numpy as np
 from src.detection.hand_detection import HandDetection
 from src.roi.region_of_interest import RegionOfInterest
 from src.roi.roi_collection import RoiCollection
-from src.shared.hand_side import HandSide
 
 _FONT           = cv2.FONT_HERSHEY_SIMPLEX
 _LINE_THICKNESS = 2
@@ -27,9 +26,9 @@ _HAND_CONNECTIONS = [
     (5, 9), (9, 13), (13, 17),             # Palma
 ]
 
-_HAND_COLORS: dict[HandSide, tuple[int, int, int]] = {
-    HandSide.LEFT:  (255, 100, 0),
-    HandSide.RIGHT: (0, 200, 50),
+_HAND_COLORS: dict[str, tuple[int, int, int]] = {
+    "left":  (255, 100, 0),
+    "right": (0, 200, 50),
 }
 
 _ZONE_COLOR_DEFAULT  = (50, 205, 50)
@@ -39,12 +38,6 @@ _ZONE_COLOR_EXIT     = (255, 100, 0)
 _ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
     "Montagem": _ZONE_COLOR_ASSEMBLY,
     "Saida":    _ZONE_COLOR_EXIT,
-}
-
-# A câmara está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
-_FLIPPED_SIDE: dict[HandSide, HandSide] = {
-    HandSide.LEFT:  HandSide.RIGHT,
-    HandSide.RIGHT: HandSide.LEFT,
 }
 
 
@@ -64,25 +57,10 @@ def _draw_keypoints(frame: np.ndarray, keypoints, color: tuple[int, int, int]) -
         cv2.circle(frame, (kp.position.x, kp.position.y), _KEYPOINT_RADIUS, color, -1)
 
 
-def _draw_bounding_box(
-    frame: np.ndarray,
-    detection: HandDetection,
-    color: tuple[int, int, int],
-) -> None:
-    tl = detection.bounding_box.top_left
-    br = detection.bounding_box.bottom_right
-    cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), color, _LINE_THICKNESS)
-
-    flipped_side = _FLIPPED_SIDE[detection.hand_side]
-    label = f"{flipped_side.value}  {detection.confidence.as_percentage():.0f}%"
-    cv2.putText(frame, label, (tl.x, tl.y - 8), _FONT, 0.5, color, 1)
-
-
 def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
-    color = _HAND_COLORS[detection.hand_side]
+    color = _HAND_COLORS[detection.hand_side.value]
     _draw_skeleton(frame, detection.keypoints, color)
     _draw_keypoints(frame, detection.keypoints, color)
-    _draw_bounding_box(frame, detection, color)
 
 
 def draw_detections(frame: np.ndarray, detections: list[HandDetection]) -> None:
