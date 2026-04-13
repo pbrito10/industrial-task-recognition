@@ -24,8 +24,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# Garante que o DISPLAY está definido quando o script é corrido fora de uma sessão gráfica
-if not os.environ.get("DISPLAY"):
+# Quando em SSH, força o display físico da máquina remota
+if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":0"
 
 # --- Configuração ---
@@ -190,6 +190,9 @@ def main() -> None:
         if not ok:
             print("Erro a ler frame da câmara.")
             break
+
+        # Aplica o mesmo flip do pipeline para que os pontos clicados sejam consistentes
+        frame = cv2.flip(frame, -1)
 
         # Sincroniza pontos clicados (lista global) com o calibrador
         while len(_src_points) > calibrator.point_count:
