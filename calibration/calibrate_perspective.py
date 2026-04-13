@@ -19,9 +19,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-
+import os
 import cv2
 import numpy as np
+
+# Garante que o DISPLAY está definido quando o script é corrido fora de uma sessão gráfica
+if not os.environ.get("DISPLAY"):
+    os.environ["DISPLAY"] = ":0"
 
 # --- Configuração ---
 CAMERA_INDEX: int = 0
@@ -164,9 +168,14 @@ def main() -> None:
     window_main = "Calibração de Perspetiva — Clica 4 cantos"
     window_preview = "Preview — Vista Corrigida"
 
-    cv2.namedWindow(window_main)
+    cv2.namedWindow(window_main, cv2.WINDOW_NORMAL)
+     # Mostra um frame inicial para garantir que a janela está criada antes do callback
+    ok, frame = cap.read()
+    if ok:
+        cv2.imshow(window_main, frame)
+        cv2.waitKey(1)
     cv2.setMouseCallback(window_main, _on_mouse_click, calibrator)
-
+    
     print("=== Calibração de Perspetiva ===")
     print(f"Retângulo de referência: {REFERENCE_WIDTH_MM} mm × {REFERENCE_HEIGHT_MM} mm")
     print(f"Imagem de saída: {output_size[0]}×{output_size[1]} px\n")
