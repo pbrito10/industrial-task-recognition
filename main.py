@@ -11,6 +11,7 @@
 # apenas o que precisa — herdar estado do pai causaria problemas com
 # OpenCV e X11, especialmente ao usar "Testar Câmara" após "Definir ROIs".
 
+import os
 import subprocess
 import sys
 import time
@@ -18,6 +19,11 @@ from multiprocessing import Event, Process, Queue, set_start_method
 from pathlib import Path
 
 import yaml
+
+# Quando em SSH, o DISPLAY aponta para o display encaminhado (não funciona localmente).
+# Força sempre o display físico da máquina remota.
+if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+    os.environ["DISPLAY"] = ":0"
 
 _CONFIG_PATH = Path(__file__).parent / "config" / "settings.yaml"
 _ROI_PATH    = Path(__file__).parent / "config" / "rois.json"

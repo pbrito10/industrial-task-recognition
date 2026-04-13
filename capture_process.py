@@ -9,8 +9,12 @@
 
 
 def run(frame_queue, stop_event, config):
+    import os
     import queue
     import cv2
+
+    if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
 
     from src.video.camera import Camera
 
