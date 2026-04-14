@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 class TaskEvent:
     """Value object que representa uma tarefa concluída (ou interrompida por timeout).
 
-    Transporta os dados de uma tarefa terminada entre a TaskStateMachine
-    e os consumidores (MetricsCalculator, EventLogger, ExcelExporter).
+    Produzido pela TaskStateMachine e consumido por MetricsCalculator,
+    DebugLogger e ExcelExporter.
 
     was_forced=True indica que a tarefa foi fechada por timeout — a duração
     está inflacionada e não entra nas métricas de tarefa, mas sim nas de

@@ -26,6 +26,7 @@ class DashboardWriter(OutputInterface):
         temp_path.replace(self._output_path)
 
     def _serialize(self, snapshot: MetricsSnapshot) -> dict:
+        """Converte o snapshot para o dict JSON enviado ao Streamlit."""
         return {
             "captured_at":      snapshot.captured_at.isoformat(),
             "session_duration": snapshot.session_duration.total_seconds(),
@@ -40,6 +41,7 @@ class DashboardWriter(OutputInterface):
         }
 
     def _serialize_task_metrics(self, snapshot: MetricsSnapshot) -> dict:
+        """Serializa métricas por zona. Omite zonas sem ocorrências (count == 0)."""
         result = {}
         for zone_name, metrics in snapshot.task_metrics.items():
             if metrics.count() == 0:
@@ -54,6 +56,7 @@ class DashboardWriter(OutputInterface):
         return result
 
     def _serialize_cycle_metrics(self, snapshot: MetricsSnapshot) -> dict:
+        """Serializa métricas de ciclos. Devolve {"count": 0} se não há ciclos completos."""
         metrics = snapshot.cycle_metrics
         if metrics.count() == 0:
             return {"count": 0}

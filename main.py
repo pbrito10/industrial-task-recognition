@@ -30,26 +30,31 @@ _ROI_PATH    = Path(__file__).parent / "config" / "rois.json"
 
 
 def run_camera(frame_queue, stop_event, config):
+    """Entrada do processo câmara: captura frames e publica em frame_queue."""
     import capture_process
     capture_process.run(frame_queue, stop_event, config)
 
 
 def run_detector(frame_queue, detection_queue, stop_event, config):
+    """Entrada do processo detector: lê frame_queue e publica deteções em detection_queue."""
     import detection_process
     detection_process.run(frame_queue, detection_queue, stop_event, config)
 
 
 def run_display(detection_queue, stop_event):
+    """Entrada do processo display (modo 'Testar Câmara'): mostra feed anotado sem gravar."""
     import display_process
     display_process.run(detection_queue, stop_event)
 
 
 def run_pipeline(detection_queue, stop_event, config, roi_path):
+    """Entrada do processo pipeline (modo 'Correr'): tracking, métricas e outputs."""
     import monitor_process
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
 def _start_processes(processos: dict) -> None:
+    """Inicia todos os processos do dicionário com delay de 0.5 s entre cada um."""
     print("A arrancar processos...")
     for nome, processo in processos.items():
         processo.start()
@@ -59,6 +64,7 @@ def _start_processes(processos: dict) -> None:
 
 
 def _wait_for_stop(stop_event) -> None:
+    """Bloqueia até stop_event ser ativado ou Ctrl+C ser pressionado."""
     try:
         while not stop_event.is_set():
             time.sleep(0.1)
@@ -68,6 +74,7 @@ def _wait_for_stop(stop_event) -> None:
 
 
 def _terminate_processes(processos: dict) -> None:
+    """Aguarda terminação (join 3 s) e força terminate nos processos que ainda estejam vivos."""
     for processo in processos.values():
         processo.join(timeout=3)
         if processo.is_alive():

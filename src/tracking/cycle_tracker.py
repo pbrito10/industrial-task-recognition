@@ -64,17 +64,23 @@ class CycleTracker:
         return None
 
     def current_cycle_number(self) -> int:
-        """Número do ciclo em curso (começa em 1)."""
+        """Número do ciclo em curso (começa em 1; incrementa quando um ciclo fecha).
+
+        Usado como callback nos construtores de OneHandStateMachine e TwoHandsStateMachine:
+            machine = OneHandStateMachine(..., cycle_number_fn=tracker.current_cycle_number, ...)
+        Cada TaskEvent produzido pela máquina regista o número do ciclo no momento da conclusão.
+        """
         return self._completed_cycles + 1
 
     def _is_cycle_complete(self, event: TaskEvent) -> bool:
         return event.zone_name == self._exit_zone and not event.was_forced
 
     def _close_cycle(self) -> CycleResult:
-        actual_sequence = [t.zone_name for t in self._tasks_in_cycle if not t.was_forced]
-        order_ok        = _matches_order(actual_sequence, self._expected_order)
-        duration        = self._tasks_in_cycle[-1].end_time - self._tasks_in_cycle[0].start_time
-        cycle_number    = self._completed_cycles + 1
+        """Fecha o ciclo atual, valida a ordem, reinicia o acumulador e devolve o resultado."""
+        actual_sequence   = [t.zone_name for t in self._tasks_in_cycle if not t.was_forced]
+        sequence_in_order = _matches_order(actual_sequence, self._expected_order)
+        duration          = self._tasks_in_cycle[-1].end_time - self._tasks_in_cycle[0].start_time
+        cycle_number      = self._completed_cycles + 1
 
         self._tasks_in_cycle    = []
         self._completed_cycles += 1
@@ -82,6 +88,6 @@ class CycleTracker:
         return CycleResult(
             duration=duration,
             cycle_number=cycle_number,
-            order_ok=order_ok,
+            sequence_in_order=sequence_in_order,
             actual_sequence=actual_sequence,
         )

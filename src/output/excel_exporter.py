@@ -32,7 +32,7 @@ class ExcelExporter(OutputInterface):
         self._output_dir    = output_dir
         self._session_start = session_start
         self._events:       list[TaskEvent]  = []
-        self._cycle_order:  dict[int, bool]  = {}  # cycle_number → order_ok
+        self._cycle_order:  dict[int, bool]  = {}  # cycle_number → sequence_in_order
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -41,8 +41,8 @@ class ExcelExporter(OutputInterface):
         self._events.append(event)
 
     def add_cycle_result(self, cycle_result: CycleResult) -> None:
-        """Regista se o ciclo foi concluído na ordem correta."""
-        self._cycle_order[cycle_result.cycle_number] = cycle_result.order_ok
+        """Regista se as zonas do ciclo foram visitadas na sequência correta."""
+        self._cycle_order[cycle_result.cycle_number] = cycle_result.sequence_in_order
 
     def write(self, snapshot: MetricsSnapshot) -> None:
         """Gera o ficheiro Excel com todas as folhas."""
@@ -58,6 +58,7 @@ class ExcelExporter(OutputInterface):
     # ── Folhas ───────────────────────────────────────────────────────────────
 
     def _write_summary(self, writer: pd.ExcelWriter, snapshot: MetricsSnapshot) -> None:
+        """Folha 'Resumo': métricas globais da sessão numa única tabela de dois campos."""
         cycle   = snapshot.cycle_metrics
         avg_s   = "—"
         std_s   = "—"
@@ -82,6 +83,7 @@ class ExcelExporter(OutputInterface):
         self._bold_headers(writer, "Resumo", df)
 
     def _write_zone_metrics(self, writer: pd.ExcelWriter, snapshot: MetricsSnapshot) -> None:
+        """Folha 'Métricas por Zona': estatísticas por zona com gargalo destacado a amarelo."""
         rows = []
         for zone_name, metrics in snapshot.task_metrics.items():
             if metrics.count() == 0:
@@ -101,23 +103,27 @@ class ExcelExporter(OutputInterface):
         self._highlight_bottleneck(writer, "Métricas por Zona", df, snapshot.bottleneck_zone)
 
     def _write_cycles(self, writer: pd.ExcelWriter) -> None:
-        # Agrupa eventos por ciclo para reconstruir início e fim de cada ciclo
+        """Folha 'Ciclos': uma linha por ciclo com início, fim, duração e sequência correta.
+
+        O início e fim de cada ciclo são reconstruídos aqui a partir dos TaskEvents
+        acumulados, porque o CycleResult apenas guarda duração, não timestamps absolutos.
+        """
         cycles: dict[int, list[TaskEvent]] = {}
         for event in self._events:
             cycles.setdefault(event.cycle_number, []).append(event)
 
         rows = []
         for cycle_number, events in sorted(cycles.items()):
-            order_ok = self._cycle_order.get(cycle_number, None)
+            sequence_in_order = self._cycle_order.get(cycle_number, None)
             start    = min(e.start_time for e in events)
             end      = max(e.end_time   for e in events)
             duration = round((end - start).total_seconds(), 2)
             rows.append({
-                "Nº Ciclo":      cycle_number,
-                "Início":        start.strftime("%H:%M:%S"),
-                "Fim":           end.strftime("%H:%M:%S"),
-                "Duração (s)":   duration,
-                "Ordem Correta": _ORDER_LABEL.get(order_ok, "—"),
+                "Nº Ciclo":           cycle_number,
+                "Início":             start.strftime("%H:%M:%S"),
+                "Fim":                end.strftime("%H:%M:%S"),
+                "Duração (s)":        duration,
+                "Sequência Correta":  _ORDER_LABEL.get(sequence_in_order, "—"),
             })
 
         df = pd.DataFrame(rows)
@@ -125,6 +131,7 @@ class ExcelExporter(OutputInterface):
         self._bold_headers(writer, "Ciclos", df)
 
     def _write_events(self, writer: pd.ExcelWriter) -> None:
+        """Folha 'Eventos': uma linha por TaskEvent, incluindo tarefas forçadas por timeout."""
         rows = [
             {
                 "Ciclo":       event.cycle_number,
@@ -144,6 +151,7 @@ class ExcelExporter(OutputInterface):
     # ── Formatação ────────────────────────────────────────────────────────────
 
     def _bold_headers(self, writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
+        """Aplica bold à linha de cabeçalho da folha indicada."""
         sheet = writer.sheets[sheet_name]
         for col_idx in range(1, len(df.columns) + 1):
             sheet.cell(row=1, column=col_idx).font = _HEADER_FONT
@@ -155,6 +163,7 @@ class ExcelExporter(OutputInterface):
         df: pd.DataFrame,
         bottleneck: str | None,
     ) -> None:
+        """Destaca a amarelo todas as células da linha correspondente à zona gargalo."""
         if bottleneck is None or "Zona" not in df.columns:
             return
 

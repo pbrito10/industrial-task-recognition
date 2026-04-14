@@ -32,7 +32,53 @@ class StateMachineInterface(ABC):
     def state(self) -> TaskState: ...
 
 
-class OneHandStateMachine(StateMachineInterface):
+class _BaseStateMachine(StateMachineInterface):
+    """Lógica partilhada pelas máquinas de estados de uma e duas mãos.
+
+    Encapsula parâmetros de construção comuns, state() e _complete_task(),
+    eliminando duplicação entre OneHandStateMachine e TwoHandsStateMachine.
+
+    _reset_to_idle() é abstracto porque cada máquina tem campos de estado
+    diferentes que precisam de ser limpos de forma específica.
+    """
+
+    def __init__(
+        self,
+        dwell_time:       timedelta,
+        task_timeout:     timedelta,
+        cycle_number_fn:  Callable[[], int],
+        strategy:         ActivationStrategy,
+    ) -> None:
+        self._dwell_time      = dwell_time
+        self._task_timeout    = task_timeout
+        self._cycle_number_fn = cycle_number_fn
+        self._strategy        = strategy
+        self._task_state:   TaskState       = TaskState.IDLE
+        self._tracked_zone: str | None      = None
+        self._task_start:   datetime | None = None
+
+    def state(self) -> TaskState:
+        return self._task_state
+
+    def _complete_task(self, end_time: datetime, was_forced: bool) -> TaskEvent:
+        """Cria o TaskEvent, chama _reset_to_idle() e devolve o evento ao orquestrador."""
+        event = TaskEvent.create(
+            zone_name=self._tracked_zone,
+            start_time=self._task_start,
+            end_time=end_time,
+            cycle_number=self._cycle_number_fn(),
+            was_forced=was_forced,
+        )
+        self._reset_to_idle()
+        return event
+
+    @abstractmethod
+    def _reset_to_idle(self) -> None:
+        """Repõe todos os campos de estado a None/IDLE. Implementado por cada subclasse."""
+        ...
+
+
+class OneHandStateMachine(_BaseStateMachine):
     """Máquina de estados para zonas que exigem apenas uma mão.
 
     IDLE → DWELLING → TASK_IN_PROGRESS → IDLE
@@ -48,19 +94,9 @@ class OneHandStateMachine(StateMachineInterface):
         cycle_number_fn:  Callable[[], int],
         strategy:         ActivationStrategy,
     ) -> None:
-        self._dwell_time      = dwell_time
-        self._task_timeout    = task_timeout
-        self._cycle_number_fn = cycle_number_fn
-        self._strategy        = strategy
-
-        self._task_state:    TaskState            = TaskState.IDLE
-        self._tracked_zone:  str | None           = None
+        super().__init__(dwell_time, task_timeout, cycle_number_fn, strategy)
         self._prev_detection: HandDetection | None = None
-        self._dwell_start:   datetime | None      = None
-        self._task_start:    datetime | None      = None
-
-    def state(self) -> TaskState:
-        return self._task_state
+        self._dwell_start:    datetime | None      = None
 
     def update(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> TaskEvent | None:
         if self._task_state == TaskState.IDLE:
@@ -117,10 +153,8 @@ class OneHandStateMachine(StateMachineInterface):
     ) -> TaskEvent | None:
         if frame_time - self._task_start >= self._task_timeout:
             return self._complete_task(frame_time, was_forced=True)
-
         if self._hand_in_tracked_zone(classified_hands) is None:
             return self._complete_task(frame_time, was_forced=False)
-
         return None
 
     def _hand_in_tracked_zone(
@@ -132,17 +166,6 @@ class OneHandStateMachine(StateMachineInterface):
                 return detection
         return None
 
-    def _complete_task(self, end_time: datetime, was_forced: bool) -> TaskEvent:
-        event = TaskEvent.create(
-            zone_name=self._tracked_zone,
-            start_time=self._task_start,
-            end_time=end_time,
-            cycle_number=self._cycle_number_fn(),
-            was_forced=was_forced,
-        )
-        self._reset_to_idle()
-        return event
-
     def _reset_to_idle(self) -> None:
         self._task_state     = TaskState.IDLE
         self._tracked_zone   = None
@@ -151,7 +174,7 @@ class OneHandStateMachine(StateMachineInterface):
         self._task_start     = None
 
 
-class TwoHandsStateMachine(StateMachineInterface):
+class TwoHandsStateMachine(_BaseStateMachine):
     """Máquina de estados para zonas que exigem as duas mãos simultaneamente.
 
     IDLE → WAITING_SECOND_HAND → DWELLING_TWO_HANDS → TASK_IN_PROGRESS → IDLE
@@ -175,20 +198,10 @@ class TwoHandsStateMachine(StateMachineInterface):
         cycle_number_fn:  Callable[[], int],
         strategy:         ActivationStrategy,
     ) -> None:
-        self._dwell_time      = dwell_time
-        self._task_timeout    = task_timeout
-        self._cycle_number_fn = cycle_number_fn
-        self._strategy        = strategy
-
-        self._task_state:      TaskState                      = TaskState.IDLE
-        self._tracked_zone:    str | None                     = None
-        self._prev_detections: dict[HandSide, HandDetection]  = {}
-        self._waiting_start:   datetime | None                = None
-        self._dwell_start:     datetime | None                = None
-        self._task_start:      datetime | None                = None
-
-    def state(self) -> TaskState:
-        return self._task_state
+        super().__init__(dwell_time, task_timeout, cycle_number_fn, strategy)
+        self._prev_detections: dict[HandSide, HandDetection] = {}
+        self._waiting_start:   datetime | None               = None
+        self._dwell_start:     datetime | None               = None
 
     def update(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> TaskEvent | None:
         if self._task_state == TaskState.IDLE:
@@ -270,10 +283,8 @@ class TwoHandsStateMachine(StateMachineInterface):
     ) -> TaskEvent | None:
         if frame_time - self._task_start >= self._task_timeout:
             return self._complete_task(frame_time, was_forced=True)
-
         if len(self._hands_in_tracked_zone(classified_hands)) < 2:
             return self._complete_task(frame_time, was_forced=False)
-
         return None
 
     def _hands_in_tracked_zone(
@@ -284,17 +295,6 @@ class TwoHandsStateMachine(StateMachineInterface):
             detection for detection, zone in classified_hands
             if zone is not None and zone.name == self._tracked_zone
         ]
-
-    def _complete_task(self, end_time: datetime, was_forced: bool) -> TaskEvent:
-        event = TaskEvent.create(
-            zone_name=self._tracked_zone,
-            start_time=self._task_start,
-            end_time=end_time,
-            cycle_number=self._cycle_number_fn(),
-            was_forced=was_forced,
-        )
-        self._reset_to_idle()
-        return event
 
     def _reset_to_idle(self) -> None:
         self._task_state      = TaskState.IDLE
@@ -354,12 +354,11 @@ class TaskStateMachine:
             if zone is not None:
                 hands_per_zone[zone.name] = hands_per_zone.get(zone.name, 0) + 1
 
-        # Zonas two-hands só são activadas quando ambas as mãos já estão presentes.
-        # Activar com uma mão deixaria a máquina em WAITING_SECOND_HAND e bloquearia
-        # a detecção de qualquer outra zona de uma mão enquanto o operador trabalha.
+        # Tenta ativar zonas two-hands primeiro (requisito mais exigente)
         for zone_name, count in hands_per_zone.items():
-            if zone_name in self._two_hands_zones and count >= 2:
-                self._active = self._two_hands
+            machine = self._machine_for_zone(zone_name, count)
+            if machine is not None:
+                self._active = machine
                 return self._active.update(classified_hands, frame_time)
 
         # Zona de uma mão: filtra zonas two-hands para que _handle_idle não as possa
@@ -374,6 +373,18 @@ class TaskStateMachine:
                 self._active = self._one_hand
                 return self._active.update(filtered, frame_time)
 
+        return None
+
+    def _machine_for_zone(
+        self, zone_name: str, hand_count: int
+    ) -> StateMachineInterface | None:
+        """Devolve a máquina adequada se o critério de ativação da zona está cumprido.
+
+        Ponto de extensão OCP: para adicionar um novo tipo de zona, adiciona a lógica
+        aqui sem modificar _activate_best_zone.
+        """
+        if zone_name in self._two_hands_zones and hand_count >= 2:
+            return self._two_hands
         return None
 
     def current_state(self) -> TaskState:

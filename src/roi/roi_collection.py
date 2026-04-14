@@ -29,13 +29,17 @@ class RoiCollection:
         return None
 
     def get(self, name: str) -> RegionOfInterest | None:
+        """Devolve a zona com o nome indicado, ou None se não existir."""
         return self._rois.get(name)
 
     def contains(self, name: str) -> bool:
+        """True se existe uma zona com este nome na coleção."""
         return name in self._rois
 
     def is_empty(self) -> bool:
+        """True se a coleção não tem nenhuma zona definida."""
         return len(self._rois) == 0
 
     def all(self) -> list[RegionOfInterest]:
+        """Devolve todas as zonas por ordem de inserção."""
         return list(self._rois.values())

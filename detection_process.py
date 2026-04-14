@@ -6,14 +6,18 @@
 #
 # O get() com timeout=0.1 s serve para que o loop verifique stop_event
 # regularmente em vez de bloquear indefinidamente se a câmara parar.
+#
+# O detector é tipado como DetectorInterface para tornar explícita a
+# dependência de abstração (DIP) — trocar o backend de deteção não toca no loop.
 
 
 def run(frame_queue, detection_queue, stop_event, config):
     import queue
 
+    from src.detection.detector_interface import DetectorInterface
     from src.detection.mediapipe_detector import MediapipeDetector
 
-    detector = MediapipeDetector(
+    detector: DetectorInterface = MediapipeDetector(
         model_path=config["detection"]["model_path"],
         max_num_hands=config["detection"]["max_num_hands"],
         min_detection_confidence=config["detection"]["min_detection_confidence"],
