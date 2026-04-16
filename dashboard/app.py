@@ -7,7 +7,6 @@ import streamlit as st
 import yaml
 
 _SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
-_DATA_PATH     = Path(__file__).parent / "data" / "metrics.json"
 
 
 # ── Carregamento de dados ─────────────────────────────────────────────────────
@@ -17,11 +16,11 @@ def _load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def _load_data() -> dict | None:
+def _load_data(data_path: Path) -> dict | None:
     """Lê o JSON escrito pelo DashboardWriter. Devolve None se ainda não existe."""
-    if not _DATA_PATH.exists():
+    if not data_path.exists():
         return None
-    text = _DATA_PATH.read_text(encoding="utf-8").strip()
+    text = data_path.read_text(encoding="utf-8").strip()
     if not text:
         return None
     try:
@@ -167,9 +166,10 @@ def main() -> None:
     )
     st.title("Sistema de Reconhecimento Industrial")
 
-    config  = _load_config()
-    refresh = config["dashboard"]["refresh_seconds"]
-    data    = _load_data()
+    config    = _load_config()
+    refresh   = config["dashboard"]["refresh_seconds"]
+    data_path = Path(config["dashboard"]["data_path"])
+    data      = _load_data(data_path)
 
     if data is None:
         st.info("A aguardar dados do pipeline...")
