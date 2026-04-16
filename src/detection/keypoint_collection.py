@@ -16,21 +16,15 @@ class KeypointCollection:
     _keypoints: list[Keypoint] = field(repr=False)
 
     def __post_init__(self) -> None:
-        if len(self._keypoints) != _EXPECTED_COUNT:
-            raise ValueError(
-                f"KeypointCollection exige {_EXPECTED_COUNT} keypoints, "
-                f"recebidos {len(self._keypoints)}"
-            )
+        raise NotImplementedError
 
     def wrist(self) -> Keypoint:
         """Pulso (índice 0)."""
-        return self._keypoints[0]
+        raise NotImplementedError
 
     def centroid(self) -> Point:
         """Centro geométrico dos 21 pontos."""
-        avg_x = sum(kp.position.x for kp in self._keypoints) // _EXPECTED_COUNT
-        avg_y = sum(kp.position.y for kp in self._keypoints) // _EXPECTED_COUNT
-        return Point(x=avg_x, y=avg_y)
+        raise NotImplementedError
 
     def finger_mcp_centroid(self) -> Point:
         """Centro dos MCP dos quatro dedos — ponto de referência para deteção de zona.
@@ -47,20 +41,15 @@ class KeypointCollection:
         estão posicionados sobre a zona de trabalho. Excluímos o polegar (índice 2)
         porque se move num plano diferente dos outros quatro e introduziria desvio.
         """
-        mcps  = [self._keypoints[i] for i in _FINGER_MCP_INDICES]
-        avg_x = sum(kp.position.x for kp in mcps) // len(_FINGER_MCP_INDICES)
-        avg_y = sum(kp.position.y for kp in mcps) // len(_FINGER_MCP_INDICES)
-        return Point(x=avg_x, y=avg_y)
+        raise NotImplementedError
 
     def fingertips(self) -> list[Keypoint]:
         """Pontas dos cinco dedos (índices 4, 8, 12, 16, 20)."""
-        return [self._keypoints[i] for i in _FINGERTIP_INDICES]
+        raise NotImplementedError
 
     def by_index(self, index: int) -> Keypoint:
         """Acesso por índice MediaPipe (0–20)."""
-        if not (0 <= index < _EXPECTED_COUNT):
-            raise ValueError(f"Índice de keypoint inválido: {index} (deve ser 0–20)")
-        return self._keypoints[index]
+        raise NotImplementedError
 
     def all(self) -> list[Keypoint]:
-        return list(self._keypoints)
+        raise NotImplementedError

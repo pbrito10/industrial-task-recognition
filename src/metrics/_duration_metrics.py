@@ -14,33 +14,28 @@ class _DurationMetrics:
     """
 
     def __init__(self) -> None:
-        self._durations: list[timedelta] = []
+        raise NotImplementedError
 
     def _add_duration(self, duration: timedelta) -> None:
         """Regista uma duração. Chamado pelas subclasses no seu add()."""
-        self._durations.append(duration)
+        raise NotImplementedError
 
     def count(self) -> int:
         """Número de ocorrências registadas."""
-        return len(self._durations)
+        raise NotImplementedError
 
     def minimum(self) -> timedelta:
         """Duração mínima observada. Requer count() > 0."""
-        return min(self._durations)
+        raise NotImplementedError
 
     def maximum(self) -> timedelta:
         """Duração máxima observada. Requer count() > 0."""
-        return max(self._durations)
+        raise NotImplementedError
 
     def average(self) -> timedelta:
         """Média aritmética das durações. Requer count() > 0."""
-        total = sum((d.total_seconds() for d in self._durations), 0.0)
-        return timedelta(seconds=total / self.count())
+        raise NotImplementedError
 
     def std_deviation(self) -> timedelta:
         """Desvio padrão das durações. Devolve timedelta(0) se count() < 2."""
-        if self.count() < 2:
-            return timedelta(0)
-        mean     = self.average().total_seconds()
-        variance = sum((d.total_seconds() - mean) ** 2 for d in self._durations) / self.count()
-        return timedelta(seconds=math.sqrt(variance))
+        raise NotImplementedError

@@ -16,4 +16,4 @@ class Point:
 
     def distance_to(self, other: Point) -> float:
         """Distância euclidiana até outro ponto — útil para filtros de ruído."""
-        return math.sqrt((self.x - other.x) ** 2 + (self.y - other.y) ** 2)
+        raise NotImplementedError

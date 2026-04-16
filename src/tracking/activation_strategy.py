@@ -29,7 +29,7 @@ class TimeDwellStrategy(ActivationStrategy):
     """
 
     def is_active(self, detection: HandDetection, previous: HandDetection | None) -> bool:
-        return True
+        raise NotImplementedError
 
 
 class StillnessDwellStrategy(ActivationStrategy):
@@ -44,12 +44,7 @@ class StillnessDwellStrategy(ActivationStrategy):
     """
 
     def __init__(self, velocity_threshold_px_per_frame: float) -> None:
-        self._threshold = velocity_threshold_px_per_frame
+        raise NotImplementedError
 
     def is_active(self, detection: HandDetection, previous: HandDetection | None) -> bool:
-        if previous is None:
-            # Primeiro frame nesta zona — sem referência anterior para calcular velocidade
-            return False
-
-        velocity = detection.wrist().position.distance_to(previous.wrist().position)
-        return velocity < self._threshold
+        raise NotImplementedError

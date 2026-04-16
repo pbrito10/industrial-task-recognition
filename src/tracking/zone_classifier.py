@@ -16,14 +16,12 @@ class ZoneClassifier:
     """
 
     def __init__(self, rois: RoiCollection) -> None:
-        self._rois = rois
+        raise NotImplementedError
 
     def classify(self, detections: list[HandDetection]) -> list[ClassifiedHand]:
-        return [self._classify_one(detection) for detection in detections]
+        raise NotImplementedError
 
     def _classify_one(self, detection: HandDetection) -> ClassifiedHand:
         # O ponto de referência é o centróide dos MCP e não o pulso nem as fingertips —
         # ver KeypointCollection.finger_mcp_centroid() para a justificação.
-        point = detection.keypoints.finger_mcp_centroid()
-        zone  = self._rois.find_zone_for_point(point)
-        return detection, zone
+        raise NotImplementedError

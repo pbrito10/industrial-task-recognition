@@ -24,24 +24,14 @@ class RegionOfInterest:
     bottom_right: Point
 
     def contains(self, point: Point) -> bool:
-        return (
-            self.top_left.x <= point.x <= self.bottom_right.x
-            and self.top_left.y <= point.y <= self.bottom_right.y
-        )
+        """True se o ponto está dentro dos limites da zona."""
+        raise NotImplementedError
 
     def to_dict(self) -> dict:
-        return {
-            _KEY_NAME: self.name,
-            _KEY_X1:   self.top_left.x,
-            _KEY_Y1:   self.top_left.y,
-            _KEY_X2:   self.bottom_right.x,
-            _KEY_Y2:   self.bottom_right.y,
-        }
+        """Serializa para o formato JSON de persistência."""
+        raise NotImplementedError
 
     @classmethod
     def from_dict(cls, data: dict) -> RegionOfInterest:
-        return cls(
-            name=data[_KEY_NAME],
-            top_left=Point(x=data[_KEY_X1], y=data[_KEY_Y1]),
-            bottom_right=Point(x=data[_KEY_X2], y=data[_KEY_Y2]),
-        )
+        """Constrói uma RegionOfInterest a partir de um dict carregado do JSON."""
+        raise NotImplementedError

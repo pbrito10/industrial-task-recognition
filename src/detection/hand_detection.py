@@ -32,7 +32,7 @@ class HandDetection:
         porque inclui os dedos, que se movem muito ao agarrar peças. Disponível para
         usos externos que não precisem da precisão do MCP.
         """
-        return self.keypoints.centroid()
+        raise NotImplementedError
 
     def wrist(self) -> Keypoint:
         """Landmark 0 — base do pulso.
@@ -42,4 +42,11 @@ class HandDetection:
           - ancorar o label de identificação da mão (frame_annotator)
         Não é usado para determinar em que zona a mão está — ver finger_mcp_centroid().
         """
-        return self.keypoints.wrist()
+        raise NotImplementedError
+
+    def finger_mcp_centroid(self) -> Point:
+        """Centro dos MCP — ponto de referência para o ZoneClassifier.
+
+        Delega em KeypointCollection — ver lá a justificação da escolha dos MCP.
+        """
+        raise NotImplementedError

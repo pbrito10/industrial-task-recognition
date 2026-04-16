@@ -17,4 +17,4 @@ class TaskMetrics(_DurationMetrics):
 
     def add(self, duration: timedelta) -> None:
         """Regista uma nova duração observada."""
-        self._add_duration(duration)
+        raise NotImplementedError

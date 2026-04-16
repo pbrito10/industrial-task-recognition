@@ -13,13 +13,12 @@ class Confidence:
     value: float
 
     def __post_init__(self) -> None:
-        if not (0.0 <= self.value <= 1.0):
-            raise ValueError(f"Confidence deve estar entre 0.0 e 1.0, recebido: {self.value}")
+        raise NotImplementedError
 
     def is_above(self, threshold: Confidence) -> bool:
         """Verifica se a confiança supera o threshold — evita comparar floats pelo código."""
-        return self.value >= threshold.value
+        raise NotImplementedError
 
     def as_percentage(self) -> float:
         """Devolve o valor em percentagem (ex: 0.87 → 87.0)."""
-        return self.value * 100.0
+        raise NotImplementedError

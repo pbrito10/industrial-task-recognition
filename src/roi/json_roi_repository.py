@@ -16,20 +16,12 @@ class JsonRoiRepository(RoiRepository):
     """
 
     def __init__(self, path: Path) -> None:
-        self._path = path
+        raise NotImplementedError
 
     def save(self, collection: RoiCollection) -> None:
         """Serializa e escreve todas as zonas com indentação legível."""
-        data = [roi.to_dict() for roi in collection.all()]
-        self._path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        raise NotImplementedError
 
     def load(self) -> RoiCollection:
         """Carrega zonas do ficheiro. Devolve vazio se o ficheiro não existir."""
-        if not self._path.exists():
-            return RoiCollection()
-
-        data = json.loads(self._path.read_text())
-        collection = RoiCollection()
-        for entry in data:
-            collection.add(RegionOfInterest.from_dict(entry))
-        return collection
+        raise NotImplementedError

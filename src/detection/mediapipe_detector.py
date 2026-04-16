@@ -45,18 +45,7 @@ class MediapipeDetector(DetectorInterface):
         min_detection_confidence: float = 0.7,
         min_tracking_confidence: float = 0.7,
     ) -> None:
-        base_options = mp_python.BaseOptions(model_asset_path=model_path)
-        options = mp_vision.HandLandmarkerOptions(
-            base_options=base_options,
-            running_mode=mp_vision.RunningMode.VIDEO,
-            num_hands=max_num_hands,
-            min_hand_detection_confidence=min_detection_confidence,
-            # presence_confidence: threshold para o modelo continuar a rastrear
-            # uma mão já detetada. Usamos o mesmo valor de detection para consistência.
-            min_hand_presence_confidence=min_detection_confidence,
-            min_tracking_confidence=min_tracking_confidence,
-        )
-        self._landmarker = mp_vision.HandLandmarker.create_from_options(options)
+        raise NotImplementedError
 
     def detect(self, frame: np.ndarray) -> list[HandDetection]:
         """Processa um frame RGB e devolve as mãos detetadas.
@@ -64,91 +53,36 @@ class MediapipeDetector(DetectorInterface):
         Recebe: frame em RGB (convertido em capture_process antes de entrar na queue).
         Devolve: lista de HandDetection, uma por mão; lista vazia se nenhuma for detetada.
         """
-        height, width = frame.shape[:2]
+        raise NotImplementedError
 
-        mp_image     = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-        timestamp_ms = int(time.monotonic() * 1000)
-        result       = self._landmarker.detect_for_video(mp_image, timestamp_ms)
-
-        if not result.hand_landmarks:
-            return []
-
-        return [
-            self._build_detection(landmarks, handedness, width, height)
-            for landmarks, handedness in zip(result.hand_landmarks, result.handedness)
-        ]
-
-    def _build_detection(
-        self,
-        landmarks,
-        handedness,
-        width: int,
-        height: int,
-    ) -> HandDetection:
+    def _build_detection(self, landmarks, handedness, width: int, height: int) -> HandDetection:
         """Converte a saída bruta do MediaPipe num HandDetection do domínio.
 
         Extrai confiança e lado do objeto handedness, constrói os keypoints
         em píxeis e calcula a bounding box a partir dos landmarks.
         """
-        # handedness é uma lista de Category ordenada por confiança — o primeiro é o mais provável
-        category   = handedness[0]
-        confidence = Confidence(value=round(category.score, 4))
-        keypoints  = self._build_keypoints(landmarks, width, height, confidence)
+        raise NotImplementedError
 
-        return HandDetection(
-            keypoints=keypoints,
-            bounding_box=self._compute_bounding_box(keypoints, width, height),
-            confidence=confidence,
-            hand_side=_HAND_SIDE_MAP[category.category_name],
-        )
-
-    def _build_keypoints(
-        self,
-        landmarks,
-        width: int,
-        height: int,
-        confidence: Confidence,
-    ) -> KeypointCollection:
+    def _build_keypoints(self, landmarks, width: int, height: int, confidence: Confidence) -> KeypointCollection:
         """Converte os 21 landmarks normalizados [0,1] para KeypointCollection em píxeis."""
-        # A Tasks API não devolve confiança por landmark — usamos a confiança global da mão
-        keypoint_list = [
-            Keypoint(
-                index=index,
-                position=self._to_pixel_point(landmark, width, height),
-                confidence=confidence,
-            )
-            for index, landmark in enumerate(landmarks)
-        ]
-        return KeypointCollection(keypoint_list)
+        raise NotImplementedError
 
     @staticmethod
     def _to_pixel_point(landmark, width: int, height: int) -> Point:
-        return Point(x=int(landmark.x * width), y=int(landmark.y * height))
+        raise NotImplementedError
 
-    def _compute_bounding_box(
-        self,
-        keypoints: KeypointCollection,
-        width: int,
-        height: int,
-    ) -> BoundingBox:
+    def _compute_bounding_box(self, keypoints: KeypointCollection, width: int, height: int) -> BoundingBox:
         """Calcula a bounding box a partir dos extremos dos landmarks, com margem.
 
         A Tasks API não devolve bounding box — é calculada aqui a partir dos
         landmarks mínimos e máximos, com _BOUNDING_BOX_MARGIN_PX de padding.
         """
-        x_coords, y_coords = self._extract_coords(keypoints)
-        min_x, max_x = self._clamp_range(x_coords, width)
-        min_y, max_y = self._clamp_range(y_coords, height)
-        return BoundingBox(
-            top_left=Point(x=min_x, y=min_y),
-            bottom_right=Point(x=max_x, y=max_y),
-        )
+        raise NotImplementedError
 
     @staticmethod
     def _extract_coords(keypoints: KeypointCollection) -> tuple[list[int], list[int]]:
         """Devolve (lista_x, lista_y) com as coordenadas em píxeis de todos os keypoints."""
-        all_kp = keypoints.all()
-        return [kp.position.x for kp in all_kp], [kp.position.y for kp in all_kp]
+        raise NotImplementedError
 
     @staticmethod
     def _clamp_range(values: list[int], frame_max: int) -> tuple[int, int]:
@@ -157,10 +91,7 @@ class MediapipeDetector(DetectorInterface):
         Recebe: lista de coordenadas inteiras, dimensão máxima do frame.
         Devolve: (min_com_margem, max_com_margem) clampado ao frame.
         """
-        return (
-            max(0, min(values) - _BOUNDING_BOX_MARGIN_PX),
-            min(frame_max - 1, max(values) + _BOUNDING_BOX_MARGIN_PX),
-        )
+        raise NotImplementedError
 
     def release(self) -> None:
-        self._landmarker.close()
+        raise NotImplementedError

@@ -32,12 +32,9 @@ class TaskEvent:
         cycle_number: int,
         was_forced: bool,
     ) -> TaskEvent:
-        """Constrói um TaskEvent calculando a duração automaticamente."""
-        return cls(
-            zone_name=zone_name,
-            start_time=start_time,
-            end_time=end_time,
-            duration=end_time - start_time,
-            cycle_number=cycle_number,
-            was_forced=was_forced,
-        )
+        """Constrói um TaskEvent calculando a duração automaticamente.
+
+        Valida que end_time > start_time — uma duração negativa indica
+        um bug no chamador.
+        """
+        raise NotImplementedError

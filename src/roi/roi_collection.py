@@ -12,34 +12,31 @@ class RoiCollection:
     """
 
     def __init__(self) -> None:
-        self._rois: dict[str, RegionOfInterest] = {}
+        raise NotImplementedError
 
     def add(self, roi: RegionOfInterest) -> None:
         """Adiciona ou substitui uma zona — uma zona por nome."""
-        self._rois[roi.name] = roi
+        raise NotImplementedError
 
     def remove(self, name: str) -> None:
-        self._rois.pop(name, None)
+        raise NotImplementedError
 
     def find_zone_for_point(self, point: Point) -> RegionOfInterest | None:
         """Primeira zona que contém o ponto, ou None. Ordem = ordem de inserção."""
-        for roi in self._rois.values():
-            if roi.contains(point):
-                return roi
-        return None
+        raise NotImplementedError
 
     def get(self, name: str) -> RegionOfInterest | None:
         """Devolve a zona com o nome indicado, ou None se não existir."""
-        return self._rois.get(name)
+        raise NotImplementedError
 
     def contains(self, name: str) -> bool:
         """True se existe uma zona com este nome na coleção."""
-        return name in self._rois
+        raise NotImplementedError
 
     def is_empty(self) -> bool:
         """True se a coleção não tem nenhuma zona definida."""
-        return len(self._rois) == 0
+        raise NotImplementedError
 
     def all(self) -> list[RegionOfInterest]:
         """Devolve todas as zonas por ordem de inserção."""
-        return list(self._rois.values())
+        raise NotImplementedError

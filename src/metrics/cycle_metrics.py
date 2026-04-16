@@ -13,19 +13,16 @@ class CycleMetrics(_DurationMetrics):
     """
 
     def __init__(self) -> None:
-        super().__init__()
-        self._in_order_count: int = 0
+        raise NotImplementedError
 
     def add(self, duration: timedelta, sequence_in_order: bool) -> None:
         """Regista a duração de um ciclo completo e se a sequência de zonas foi respeitada."""
-        self._add_duration(duration)
-        if sequence_in_order:
-            self._in_order_count += 1
+        raise NotImplementedError
 
     def count_in_order(self) -> int:
         """Ciclos em que as zonas foram visitadas na ordem definida em cycle_zone_order."""
-        return self._in_order_count
+        raise NotImplementedError
 
     def count_out_of_order(self) -> int:
         """Ciclos com zonas visitadas fora da ordem esperada."""
-        return self.count() - self._in_order_count
+        raise NotImplementedError
