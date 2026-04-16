@@ -1,0 +1,245 @@
+# Ponto de entrada: menu + orquestração dos processos.
+#
+# Cada modo é uma composição de processos que comunicam via Queues:
+			#
+#   Testar câmara:   capture → detector → display
+#   Definir ROIs:    corre no processo principal (sessão interativa)
+#   Correr programa: capture → detector → monitor  (+Streamlit como subprocess)
+#
+# Os imports dos módulos de processo ficam dentro das funções run_*
+# porque cada processo filho arranca limpo (spawn) e deve importar
+# apenas o que precisa — herdar estado do pai causaria problemas com
+# OpenCV e X11, especialmente ao usar "Testar Câmara" após "Definir ROIs".
+
+import os
+import subprocess
+import sys
+import time
+from multiprocessing import Event, Process, Queue, set_start_method
+from pathlib import Path
+
+import yaml
+
+# Quando em SSH, o DISPLAY aponta para o display encaminhado (não funciona localmente).
+# Força sempre o display físico da máquina remota.
+if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+    os.environ["DISPLAY"] = ":0"
+
+_CONFIG_PATH = Path(__file__).parent / "config" / "settings.yaml"
+_ROI_PATH    = Path(__file__).parent / "config" / "rois.json"
+
+
+def run_camera(frame_queue, stop_event, config):
+    """Entrada do processo câmara: captura frames e publica em frame_queue."""
+    import capture_process
+    capture_process.run(frame_queue, stop_event, config)
+
+
+def run_detector(frame_queue, detection_queue, stop_event, config):
+    """Entrada do processo detector: lê frame_queue e publica deteções em detection_queue."""
+    import detection_process
+    detection_process.run(frame_queue, detection_queue, stop_event, config)
+
+
+def run_display(detection_queue, stop_event):
+    """Entrada do processo display (modo 'Testar Câmara'): mostra feed anotado sem gravar."""
+    import display_process
+    display_process.run(detection_queue, stop_event)
+
+
+def run_pipeline(detection_queue, stop_event, config, roi_path):
+    """Entrada do processo pipeline (modo 'Correr'): tracking, métricas e outputs."""
+    import monitor_process
+    monitor_process.run(detection_queue, stop_event, config, roi_path)
+
+
+def _start_processes(processos: dict) -> None:
+    """Inicia todos os processos do dicionário com delay de 0.5 s entre cada um."""
+    print("A arrancar processos...")
+    for nome, processo in processos.items():
+        processo.start()
+        time.sleep(0.5)
+        print(f"  [{nome}] iniciado (PID {processo.pid})")
+    print("A correr. Carrega 'q' na janela para parar.\n")
+
+
+def _wait_for_stop(stop_event) -> None:
+    """Bloqueia até stop_event ser ativado ou Ctrl+C ser pressionado."""
+    try:
+        while not stop_event.is_set():
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nCtrl+C — a parar...")
+        stop_event.set()
+
+
+def _terminate_processes(processos: dict) -> None:
+    """Aguarda terminação (join 3 s) e força terminate nos processos que ainda estejam vivos."""
+    for processo in processos.values():
+        processo.join(timeout=3)
+        if processo.is_alive():
+            processo.terminate()
+    print("Processos terminados.")
+
+
+def _launch(stop_event, **processos):
+    """Arranca os processos, aguarda o sinal de paragem e termina-os."""
+    _start_processes(processos)
+    _wait_for_stop(stop_event)
+    _terminate_processes(processos)
+
+
+def testar_camera(config):
+    """Abre a câmara e mostra o feed com keypoints. Não grava nada."""
+    frame_queue     = Queue(maxsize=2)
+    detection_queue = Queue(maxsize=5)
+    stop_event      = Event()
+
+    _launch(
+        stop_event,
+        camera   = Process(target=run_camera,   name="camera",
+                           args=(frame_queue, stop_event, config)),
+        detector = Process(target=run_detector, name="detector",
+                           args=(frame_queue, detection_queue, stop_event, config)),
+        display  = Process(target=run_display,  name="display",
+                           args=(detection_queue, stop_event)),
+    )
+
+
+def definir_rois(config):
+    """Sessão interativa de desenho de ROIs sobre o feed da câmara.
+
+    Corre no processo principal — não precisa de multiprocessing porque
+    tem início e fim definidos e não partilha dados com outros processos.
+
+    Controlos: 1-9 selecionar zona | Del apagar | s guardar | q sair
+    """
+    from src.roi.json_roi_repository import JsonRoiRepository
+    from src.roi.roi_drawer import RoiDrawer
+    from src.video.camera import Camera
+
+    camera_factory = lambda: Camera.from_config(config["camera"])
+
+    repository = JsonRoiRepository(path=_ROI_PATH)
+    drawer     = RoiDrawer(
+        camera_factory=camera_factory,
+        zone_names=config["tracking"]["zones"],
+    )
+
+    result = drawer.draw(repository.load())
+
+    if result is None:
+        print("Saiu sem guardar — ROIs anteriores mantidas.")
+        return
+
+    repository.save(result)
+    print(f"ROIs guardadas: {len(result.all())} zonas definidas.")
+
+
+def _validate_config_vs_rois(config: dict, roi_names: set[str]) -> list[str]:
+    """Verifica que as zonas referenciadas na config existem nas ROIs desenhadas.
+
+    Retorna lista de erros (vazia se tudo estiver consistente). Não lança exceção
+    para que o chamador possa imprimir todas as inconsistências de uma vez.
+    """
+    errors = []
+
+    # Zonas referenciadas pela config que podem faltar nas ROIs
+    exit_zone       = config["tracking"]["exit_zone"]
+    two_hands_zones = set(config["tracking"]["two_hands_zones"])
+    order_zones     = set(config["tracking"]["cycle_zone_order"])
+    required        = ({exit_zone} | two_hands_zones | order_zones)
+
+    missing = required - roi_names
+    for zone in sorted(missing):
+        errors.append(f"  • Zona '{zone}' referenciada na config mas não tem ROI desenhada.")
+
+    return errors
+
+
+def correr_programa(config):
+    """Pipeline completo com tracking, métricas, dashboard e exportação Excel.
+
+    O Streamlit é lançado como subprocess independente — não usa queues nem
+    stop_event. Lê o JSON escrito pelo DashboardWriter a cada refresh_seconds.
+    É terminado no finally para não ficar órfão se o pipeline fechar com erro.
+    """
+    from src.roi.json_roi_repository import JsonRoiRepository
+
+    rois = JsonRoiRepository(path=_ROI_PATH).load()
+
+    if not rois.all():
+        print("Nenhuma ROI definida. Usa a opção 2 primeiro.")
+        return
+
+    roi_names = {roi.name for roi in rois.all()}
+    errors    = _validate_config_vs_rois(config, roi_names)
+    if errors:
+        print("Erro: a config e as ROIs estão inconsistentes. Corrige antes de correr:")
+        for error in errors:
+            print(error)
+        return
+
+    frame_queue     = Queue(maxsize=2)
+    detection_queue = Queue(maxsize=5)
+    stop_event      = Event()
+
+    app_path       = Path(__file__).parent / "dashboard" / "app.py"
+    dashboard_proc = subprocess.Popen(
+        [sys.executable, "-m", "streamlit", "run", str(app_path)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    try:
+        _launch(
+            stop_event,
+            camera   = Process(target=run_camera,   name="camera",
+                               args=(frame_queue, stop_event, config)),
+            detector = Process(target=run_detector, name="detector",
+                               args=(frame_queue, detection_queue, stop_event, config)),
+            pipeline = Process(target=run_pipeline, name="pipeline",
+                               args=(detection_queue, stop_event, config, str(_ROI_PATH))),
+        )
+    finally:
+        dashboard_proc.terminate()
+
+
+_OPCOES = {
+    "1": ("Testar câmara",   testar_camera),
+    "2": ("Definir ROIs",    definir_rois),
+    "3": ("Correr programa", correr_programa),
+}
+
+
+def main():
+    with open(_CONFIG_PATH) as f:
+        config = yaml.safe_load(f)
+
+    while True:
+        print("\n=== Sistema de Reconhecimento Industrial ===")
+        for key, (nome, _) in _OPCOES.items():
+            print(f"  {key}. {nome}")
+        print("  0. Sair")
+
+        escolha = input("Escolha: ").strip()
+
+        if escolha == "0":
+            print("A sair...")
+            break
+
+        if escolha not in _OPCOES:
+            print("Opção inválida.")
+            continue
+
+        _, funcao = _OPCOES[escolha]
+        funcao(config)
+
+
+if __name__ == "__main__":
+    # spawn em vez de fork — necessário para que OpenCV e X11 não herdem
+    # estado do processo pai, o que causaria falhas ao usar múltiplos modos
+    # na mesma sessão (ex: Testar Câmara após Definir ROIs).
+    set_start_method("spawn")
+    main()
