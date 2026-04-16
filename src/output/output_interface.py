@@ -8,11 +8,11 @@ from src.output.metrics_snapshot import MetricsSnapshot
 class OutputInterface(ABC):
     """Contrato para qualquer destino de output (dashboard, Excel, etc.).
 
-    O MetricsCalculator depende desta abstração — nunca das implementações
-    concretas. Múltiplos outputs podem estar ativos em simultâneo sem o
-    calculador saber quantos são (DIP + ISP).
+    Permite que o mesmo MetricsSnapshot seja escrito em múltiplos destinos
+    sem o orquestrador conhecer as implementações concretas.
+    Implementações: DashboardWriter (JSON em tempo real), ExcelExporter (fim de sessão).
     """
 
     @abstractmethod
     def write(self, snapshot: MetricsSnapshot) -> None:
-        """Publica o snapshot atual das métricas."""
+        """Publica o snapshot atual das métricas no destino concreto."""

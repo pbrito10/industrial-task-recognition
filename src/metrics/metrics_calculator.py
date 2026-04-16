@@ -47,7 +47,11 @@ class MetricsCalculator:
         self._task_metrics[event.zone_name].add(event.duration)
 
     def record_cycle(self, cycle_result: CycleResult) -> None:
-        self._cycle_metrics.add(cycle_result.duration, cycle_result.order_ok)
+        """Regista as métricas de um ciclo completo (duração e se a sequência foi respeitada).
+
+        Chamado pelo _MonitorSession sempre que o CycleTracker fecha um ciclo.
+        """
+        self._cycle_metrics.add(cycle_result.duration, cycle_result.sequence_in_order)
 
     def snapshot(self) -> MetricsSnapshot:
         now              = datetime.now()

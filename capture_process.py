@@ -9,16 +9,16 @@
 
 
 def run(frame_queue, stop_event, config):
+    import os
     import queue
     import cv2
 
+    if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
+
     from src.video.camera import Camera
 
-    camera = Camera(
-        index=config["camera"]["index"],
-        width=config["camera"]["width"],
-        height=config["camera"]["height"],
-    )
+    camera = Camera.from_config(config["camera"])
 
     try:
         while not stop_event.is_set():
@@ -29,7 +29,6 @@ def run(frame_queue, stop_event, config):
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_rgb = cv2.flip(frame_rgb, 1)
 
             if frame_queue.full():
                 try:

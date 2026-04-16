@@ -43,8 +43,8 @@ class StillnessDwellStrategy(ActivationStrategy):
     A 640x480, valores entre 3 e 8 px/frame funcionam bem na prática.
     """
 
-    def __init__(self, velocity_threshold_px: float) -> None:
-        self._threshold = velocity_threshold_px
+    def __init__(self, velocity_threshold_px_per_frame: float) -> None:
+        self._threshold = velocity_threshold_px_per_frame
 
     def is_active(self, detection: HandDetection, previous: HandDetection | None) -> bool:
         if previous is None:

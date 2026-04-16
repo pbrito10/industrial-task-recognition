@@ -5,10 +5,15 @@
 
 
 def run(detection_queue, stop_event):
+    import os
     import queue
     import time
 
     import cv2
+
+    # Processos filhos arrancam sem herdar o ambiente do pai (spawn)
+    if not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
 
     from src.video import frame_annotator
 

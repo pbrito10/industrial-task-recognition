@@ -11,6 +11,7 @@
 # apenas o que precisa — herdar estado do pai causaria problemas com
 # OpenCV e X11, especialmente ao usar "Testar Câmara" após "Definir ROIs".
 
+import os
 import subprocess
 import sys
 import time
@@ -19,31 +20,41 @@ from pathlib import Path
 
 import yaml
 
+# Quando em SSH, o DISPLAY aponta para o display encaminhado (não funciona localmente).
+# Força sempre o display físico da máquina remota.
+if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+    os.environ["DISPLAY"] = ":0"
+
 _CONFIG_PATH = Path(__file__).parent / "config" / "settings.yaml"
 _ROI_PATH    = Path(__file__).parent / "config" / "rois.json"
 
 
 def run_camera(frame_queue, stop_event, config):
+    """Entrada do processo câmara: captura frames e publica em frame_queue."""
     import capture_process
     capture_process.run(frame_queue, stop_event, config)
 
 
 def run_detector(frame_queue, detection_queue, stop_event, config):
+    """Entrada do processo detector: lê frame_queue e publica deteções em detection_queue."""
     import detection_process
     detection_process.run(frame_queue, detection_queue, stop_event, config)
 
 
 def run_display(detection_queue, stop_event):
+    """Entrada do processo display (modo 'Testar Câmara'): mostra feed anotado sem gravar."""
     import display_process
     display_process.run(detection_queue, stop_event)
 
 
 def run_pipeline(detection_queue, stop_event, config, roi_path):
+    """Entrada do processo pipeline (modo 'Correr'): tracking, métricas e outputs."""
     import monitor_process
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
 def _start_processes(processos: dict) -> None:
+    """Inicia todos os processos do dicionário com delay de 0.5 s entre cada um."""
     print("A arrancar processos...")
     for nome, processo in processos.items():
         processo.start()
@@ -53,6 +64,7 @@ def _start_processes(processos: dict) -> None:
 
 
 def _wait_for_stop(stop_event) -> None:
+    """Bloqueia até stop_event ser ativado ou Ctrl+C ser pressionado."""
     try:
         while not stop_event.is_set():
             time.sleep(0.1)
@@ -62,6 +74,7 @@ def _wait_for_stop(stop_event) -> None:
 
 
 def _terminate_processes(processos: dict) -> None:
+    """Aguarda terminação (join 3 s) e força terminate nos processos que ainda estejam vivos."""
     for processo in processos.values():
         processo.join(timeout=3)
         if processo.is_alive():
@@ -105,11 +118,7 @@ def definir_rois(config):
     from src.roi.roi_drawer import RoiDrawer
     from src.video.camera import Camera
 
-    camera_factory = lambda: Camera(
-        index=config["camera"]["index"],
-        width=config["camera"]["width"],
-        height=config["camera"]["height"],
-    )
+    camera_factory = lambda: Camera.from_config(config["camera"])
 
     repository = JsonRoiRepository(path=_ROI_PATH)
     drawer     = RoiDrawer(
@@ -127,6 +136,27 @@ def definir_rois(config):
     print(f"ROIs guardadas: {len(result.all())} zonas definidas.")
 
 
+def _validate_config_vs_rois(config: dict, roi_names: set[str]) -> list[str]:
+    """Verifica que as zonas referenciadas na config existem nas ROIs desenhadas.
+
+    Retorna lista de erros (vazia se tudo estiver consistente). Não lança exceção
+    para que o chamador possa imprimir todas as inconsistências de uma vez.
+    """
+    errors = []
+
+    # Zonas referenciadas pela config que podem faltar nas ROIs
+    exit_zone       = config["tracking"]["exit_zone"]
+    two_hands_zones = set(config["tracking"]["two_hands_zones"])
+    order_zones     = set(config["tracking"]["cycle_zone_order"])
+    required        = ({exit_zone} | two_hands_zones | order_zones)
+
+    missing = required - roi_names
+    for zone in sorted(missing):
+        errors.append(f"  • Zona '{zone}' referenciada na config mas não tem ROI desenhada.")
+
+    return errors
+
+
 def correr_programa(config):
     """Pipeline completo com tracking, métricas, dashboard e exportação Excel.
 
@@ -136,8 +166,18 @@ def correr_programa(config):
     """
     from src.roi.json_roi_repository import JsonRoiRepository
 
-    if not JsonRoiRepository(path=_ROI_PATH).load().all():
+    rois = JsonRoiRepository(path=_ROI_PATH).load()
+
+    if not rois.all():
         print("Nenhuma ROI definida. Usa a opção 2 primeiro.")
+        return
+
+    roi_names = {roi.name for roi in rois.all()}
+    errors    = _validate_config_vs_rois(config, roi_names)
+    if errors:
+        print("Erro: a config e as ROIs estão inconsistentes. Corrige antes de correr:")
+        for error in errors:
+            print(error)
         return
 
     frame_queue     = Queue(maxsize=2)

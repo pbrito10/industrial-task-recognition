@@ -10,7 +10,6 @@ import numpy as np
 from src.detection.hand_detection import HandDetection
 from src.roi.region_of_interest import RegionOfInterest
 from src.roi.roi_collection import RoiCollection
-from src.shared.hand_side import HandSide
 
 _FONT           = cv2.FONT_HERSHEY_SIMPLEX
 _LINE_THICKNESS = 2
@@ -27,9 +26,9 @@ _HAND_CONNECTIONS = [
     (5, 9), (9, 13), (13, 17),             # Palma
 ]
 
-_HAND_COLORS: dict[HandSide, tuple[int, int, int]] = {
-    HandSide.LEFT:  (255, 100, 0),
-    HandSide.RIGHT: (0, 200, 50),
+_HAND_COLORS: dict[str, tuple[int, int, int]] = {
+    "left":  (255, 100, 0),
+    "right": (0, 200, 50),
 }
 
 _ZONE_COLOR_DEFAULT  = (50, 205, 50)
@@ -41,14 +40,9 @@ _ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
     "Saida":    _ZONE_COLOR_EXIT,
 }
 
-# A câmara está em espelho — o lado exibido é o oposto do detetado pelo MediaPipe
-_FLIPPED_SIDE: dict[HandSide, HandSide] = {
-    HandSide.LEFT:  HandSide.RIGHT,
-    HandSide.RIGHT: HandSide.LEFT,
-}
-
 
 def zone_color(name: str) -> tuple[int, int, int]:
+    """Devolve a cor BGR da zona pelo nome. Usa _ZONE_COLOR_MAP; fallback para verde."""
     return _ZONE_COLOR_MAP.get(name, _ZONE_COLOR_DEFAULT)
 
 
@@ -64,28 +58,24 @@ def _draw_keypoints(frame: np.ndarray, keypoints, color: tuple[int, int, int]) -
         cv2.circle(frame, (kp.position.x, kp.position.y), _KEYPOINT_RADIUS, color, -1)
 
 
-def _draw_bounding_box(
-    frame: np.ndarray,
-    detection: HandDetection,
-    color: tuple[int, int, int],
-) -> None:
-    tl = detection.bounding_box.top_left
-    br = detection.bounding_box.bottom_right
-    cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), color, _LINE_THICKNESS)
-
-    flipped_side = _FLIPPED_SIDE[detection.hand_side]
-    label = f"{flipped_side.value}  {detection.confidence.as_percentage():.0f}%"
-    cv2.putText(frame, label, (tl.x, tl.y - 8), _FONT, 0.5, color, 1)
-
-
 def draw_hand(frame: np.ndarray, detection: HandDetection) -> None:
-    color = _HAND_COLORS[detection.hand_side]
+    """Desenha esqueleto, keypoints e label no frame (in-place).
+
+    A cor depende do lado da mão (azul para esquerda, verde para direita).
+    O label é ancorado ao pulso (landmark 0) com o lado e a confiança em percentagem.
+    """
+    color = _HAND_COLORS[detection.hand_side.value]
     _draw_skeleton(frame, detection.keypoints, color)
     _draw_keypoints(frame, detection.keypoints, color)
-    _draw_bounding_box(frame, detection, color)
+
+    # Label ancorada ao pulso (landmark 0)
+    wrist = detection.keypoints.by_index(0).position
+    label = f"{detection.hand_side.value}  {detection.confidence.as_percentage():.0f}%"
+    cv2.putText(frame, label, (wrist.x, wrist.y - 10), _FONT, 0.5, color, 1)
 
 
 def draw_detections(frame: np.ndarray, detections: list[HandDetection]) -> None:
+    """Desenha todas as mãos detetadas no frame. Chama draw_hand para cada uma."""
     for detection in detections:
         draw_hand(frame, detection)
 
@@ -97,6 +87,10 @@ def draw_roi(
     *,
     selected: bool = False,
 ) -> None:
+    """Desenha uma ROI no frame (in-place): preenchimento semi-transparente + contorno + nome.
+
+    selected=True usa contorno mais espesso para indicar a zona ativa no modo de desenho.
+    """
     tl = (roi.top_left.x, roi.top_left.y)
     br = (roi.bottom_right.x, roi.bottom_right.y)
 
@@ -118,12 +112,14 @@ def draw_rois(
     *,
     selected_name: str | None = None,
 ) -> None:
+    """Desenha todas as ROIs da coleção, destacando a zona com nome selected_name (se fornecido)."""
     for roi in rois.all():
         color = zone_color(roi.name)
         draw_roi(frame, roi, color, selected=roi.name == selected_name)
 
 
 def draw_fps(frame: np.ndarray, fps: float) -> None:
+    """Escreve FPS e resolução no canto superior esquerdo do frame."""
     h, w = frame.shape[:2]
     cv2.putText(frame, f"FPS: {fps:.1f}", (10, 25), _FONT, 0.6, (255, 255, 255), 1)
     cv2.putText(frame, f"{w}x{h}", (10, 50), _FONT, 0.6, (255, 255, 255), 1)
