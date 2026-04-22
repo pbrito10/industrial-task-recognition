@@ -1,13 +1,11 @@
 """
-Calibração intrínseca da câmara usando um tabuleiro de xadrez (checkerboard).
+Calibração intrínseca da câmara usando imagens de um tabuleiro de xadrez.
 
 Como usar:
-  1. Imprime um tabuleiro de xadrez com CHECKERBOARD_SIZE cantos internos.
-  2. Executa: python calibration/calibrate_lens.py
-  3. Mostra o tabuleiro à câmara em várias posições e ângulos.
-  4. Pressiona SPACE quando o tabuleiro estiver bem visível (verde = detetado).
-  5. Após MIN_CAPTURES capturas, a calibração corre automaticamente.
-  6. Resultado guardado em calibration/data/lens_calibration.npz.
+  1. Corre capture_lens_images.py para capturar imagens do checkerboard.
+  2. Revê as imagens em calibration/data/lens_images/ e apaga as más.
+  3. Executa: python calibration/calibrate_lens.py
+  4. Resultado guardado em calibration/data/lens_calibration.npz.
 
 Uso posterior no pipeline:
   data = np.load("calibration/data/lens_calibration.npz")
@@ -16,27 +14,16 @@ Uso posterior no pipeline:
 """
 from __future__ import annotations
 
-import os
-import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
+import yaml
 
-# Garante que o DISPLAY está definido quando o script é corrido fora de uma sessão gráfica
-if not os.environ.get("DISPLAY"):
-    os.environ["DISPLAY"] = ":0"
-
-# --- Configuração ---
-CAMERA_INDEX: int = 0
-# Número de cantos internos do checkerboard (colunas, linhas).
-# Um tabuleiro 10x7 quadrados tem (9, 6) cantos internos.
-CHECKERBOARD_SIZE: tuple[int, int] = (6, 4)
-SQUARE_SIZE_MM: float = 35.0       # tamanho real de cada quadrado em milímetros
-MIN_CAPTURES: int = 15             # capturas mínimas para correr a calibração
+_SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
+IMAGES_DIR: Path = Path(__file__).parent / "data" / "lens_images"
 OUTPUT_PATH: Path = Path(__file__).parent / "data" / "lens_calibration.npz"
 
-# Critério de paragem para refinamento sub-pixel dos cantos
 _SUBPIX_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 
@@ -61,24 +48,19 @@ class LensCalibrator:
         pts *= square_mm
         return pts
 
-    def detect(self, frame: np.ndarray) -> tuple[bool, np.ndarray | None, np.ndarray]:
-        """Deteta os cantos do checkerboard num frame e devolve uma versão anotada.
+    def detect(self, frame: np.ndarray) -> tuple[bool, np.ndarray | None]:
+        """Deteta e refina os cantos do checkerboard num frame.
 
-        :return: (detetado, cantos_refinados_ou_None, frame_anotado)
+        :return: (detetado, cantos_refinados_ou_None)
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         found, corners = cv2.findChessboardCorners(gray, self._checkerboard, None)
-        display = frame.copy()
-
         if found:
-            # Refinamento sub-pixel para maior precisão
             corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), _SUBPIX_CRITERIA)
-            cv2.drawChessboardCorners(display, self._checkerboard, corners, found)
+        return found, (corners if found else None)
 
-        return found, (corners if found else None), display
-
-    def capture(self, corners: np.ndarray) -> int:
-        """Regista uma captura válida. Devolve o total de capturas acumuladas."""
+    def add(self, corners: np.ndarray) -> int:
+        """Acumula os cantos detetados. Devolve o total acumulado."""
         self._obj_pts.append(self._obj_pts_template)
         self._img_pts.append(corners)
         return len(self._obj_pts)
@@ -88,13 +70,13 @@ class LensCalibrator:
         return len(self._obj_pts)
 
     def calibrate(self, image_size: tuple[int, int]) -> CalibrationResult:
-        """Executa cv2.calibrateCamera com todas as capturas recolhidas.
+        """Executa cv2.calibrateCamera com todas as deteções acumuladas.
 
         :param image_size: (width, height) do frame em píxeis
-        :raises ValueError: se o número de capturas for insuficiente
+        :raises ValueError: se não houver deteções acumuladas
         """
-        if self.capture_count < MIN_CAPTURES:
-            raise ValueError(f"São necessárias pelo menos {MIN_CAPTURES} capturas.")
+        if self.capture_count == 0:
+            raise ValueError("Nenhuma deteção acumulada.")
 
         rms, K, dist, rvecs, tvecs = cv2.calibrateCamera(
             self._obj_pts,
@@ -164,70 +146,55 @@ class CalibrationResult:
             print("\nAVISO: RMS > 1 px — considera capturar mais imagens ou verificar o checkerboard.")
 
 
-def _draw_hud(frame: np.ndarray, count: int, detected: bool) -> None:
-    """Sobrepõe informação de estado no frame: status de deteção e contagem."""
-    h = frame.shape[0]
-    color = (0, 200, 0) if detected else (0, 0, 200)
-    status = "DETETADO — SPACE para capturar" if detected else "A procurar checkerboard..."
-
-    cv2.putText(frame, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-    cv2.putText(frame, f"Capturas: {count}/{MIN_CAPTURES}", (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(frame, "SPACE: capturar  ESC: sair", (10, h - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
-
-
 def main() -> None:
-    cap = cv2.VideoCapture(CAMERA_INDEX)
-    if not cap.isOpened():
-        print(f"Erro: não foi possível abrir a câmara {CAMERA_INDEX}.")
-        sys.exit(1)
+    with open(_SETTINGS_PATH) as f:
+        settings = yaml.safe_load(f)
+    cal_cfg = settings["calibration"]
+    checkerboard_size: tuple[int, int] = tuple(cal_cfg["checkerboard_size"])
+    square_size_mm: float = cal_cfg["square_size_mm"]
+    min_captures: int = cal_cfg["min_captures"]
 
-    calibrator = LensCalibrator(CHECKERBOARD_SIZE, SQUARE_SIZE_MM)
-    image_size: tuple[int, int] | None = None
-    calibrated = False
-    #Cria a janela explicitamente
-    cv2.namedWindow("Calibração de Lente", cv2.WINDOW_NORMAL)
+    images = sorted(IMAGES_DIR.glob("*.jpg")) + sorted(IMAGES_DIR.glob("*.png"))
+    if not images:
+        print(f"Erro: nenhuma imagem encontrada em {IMAGES_DIR}")
+        print("Corre primeiro capture_lens_images.py para capturar imagens.")
+        return
+
     print("=== Calibração de Lente ===")
-    print(f"Checkerboard: {CHECKERBOARD_SIZE[0]}x{CHECKERBOARD_SIZE[1]} cantos internos")
-    print(f"Quadrado: {SQUARE_SIZE_MM} mm | Capturas necessárias: {MIN_CAPTURES}\n")
-    print("Mostra o tabuleiro à câmara em posições e ângulos variados.")
-    print("Pressiona SPACE quando o padrão estiver detetado (cantos verdes).\n")
+    print(f"Checkerboard: {checkerboard_size[0]}x{checkerboard_size[1]} cantos internos")
+    print(f"Quadrado: {square_size_mm} mm | Mínimo necessário: {min_captures} capturas")
+    print(f"Imagens encontradas: {len(images)}\n")
 
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            print("Erro a ler frame da câmara.")
-            break
+    calibrator = LensCalibrator(checkerboard_size, square_size_mm)
+    image_size: tuple[int, int] | None = None
+
+    for path in images:
+        frame = cv2.imread(str(path))
+        if frame is None:
+            print(f"  AVISO: não foi possível ler {path.name} — ignorada.")
+            continue
 
         if image_size is None:
             h, w = frame.shape[:2]
             image_size = (w, h)
 
-        found, corners, display = calibrator.detect(frame)
-        _draw_hud(display, calibrator.capture_count, found)
-        cv2.imshow("Calibração de Lente", display)
+        found, corners = calibrator.detect(frame)
+        if found and corners is not None:
+            calibrator.add(corners)
+            print(f"  OK  {path.name}")
+        else:
+            print(f"  --  {path.name}  (checkerboard não detetado)")
 
-        key = cv2.waitKey(1) & 0xFF
+    print(f"\nCapturas válidas: {calibrator.capture_count}/{len(images)}")
 
-        if key == 27:  # ESC — sair
-            print("Saiu sem guardar.")
-            break
+    if calibrator.capture_count < min_captures:
+        print(f"Erro: são necessárias pelo menos {min_captures} capturas válidas.")
+        print("Captura mais imagens com capture_lens_images.py.")
+        return
 
-        if key == ord(' ') and found and corners is not None and not calibrated:
-            count = calibrator.capture(corners)
-            print(f"Captura {count}/{MIN_CAPTURES} registada.")
-
-            # Calibração automática ao atingir o mínimo
-            if count >= MIN_CAPTURES:
-                print("\nA calcular calibração...")
-                result = calibrator.calibrate(image_size)
-                result.save(OUTPUT_PATH)
-                calibrated = True
-                print("Pressiona ESC para sair.")
-
-    cap.release()
-    cv2.destroyAllWindows()
+    print("\nA calcular calibração...")
+    result = calibrator.calibrate(image_size)
+    result.save(OUTPUT_PATH)
 
 
 if __name__ == "__main__":

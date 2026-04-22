@@ -162,12 +162,38 @@ def _on_mouse_click(event: int, x: int, y: int, _flags: int, _param) -> None:
         _src_points.append((x, y))
 
 
+def _load_undistort_maps(
+    calibration_path: str | None, width: int, height: int
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Carrega os mapas de undistortion da calibração de lente, se disponível."""
+    if not calibration_path:
+        return None
+    path = Path(calibration_path)
+    if not path.exists():
+        print(f"AVISO: calibration_path '{path}' não encontrado — a ignorar undistortion.")
+        return None
+    data = np.load(str(path))
+    K, dist = data["K"], data["dist"]
+    newcameramtx = data["newcameramtx"] if "newcameramtx" in data else K
+    return cv2.initUndistortRectifyMap(K, dist, None, newcameramtx, (width, height), cv2.CV_32FC1)
+
+
 def main() -> None:
     global _src_points
 
     with open(_SETTINGS_PATH) as f:
         _settings = yaml.safe_load(f)
-    _flip: bool = _settings["camera"].get("flip", False)
+    _cam     = _settings["camera"]
+    _flip: bool = _cam.get("flip", False)
+    _width: int = _cam.get("width", 640)
+    _height: int = _cam.get("height", 480)
+
+    # Mesma ordem do pipeline: undistort → flip → perspetiva
+    _undistort_maps = _load_undistort_maps(_cam.get("calibration_path"), _width, _height)
+    if _undistort_maps is not None:
+        print("Calibração de lente carregada — undistortion ativo.")
+    else:
+        print("Sem calibração de lente — a usar frame raw.")
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
@@ -198,7 +224,9 @@ def main() -> None:
             print("Erro a ler frame da câmara.")
             break
 
-        # Aplica o mesmo flip do pipeline (lido de settings.yaml) para consistência
+        # Mesma ordem do pipeline: undistort → flip → perspetiva
+        if _undistort_maps is not None:
+            frame = cv2.remap(frame, *_undistort_maps, cv2.INTER_LINEAR)
         if _flip:
             frame = cv2.flip(frame, -1)
 
