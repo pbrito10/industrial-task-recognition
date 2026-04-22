@@ -75,9 +75,11 @@ class TestCycleTracker:
         assert result.sequence_in_order is True
 
     def test_incorrect_order_flagged(self, tracker):
+        # Sem histórico (<2 referências) a ordem fica como "não determinada" (None)
         for i, zone in enumerate(["Montagem", "Porca", "Chassi", "Saida"]):
             result = tracker.record(_event(zone, i * 2))
-        assert result.sequence_in_order is False
+        assert result.sequence_in_order is None
+        assert result.is_anomaly is False
 
     def test_forced_tasks_excluded_from_order_check(self, tracker):
         # Tarefa forçada no meio não deve influenciar a verificação de ordem

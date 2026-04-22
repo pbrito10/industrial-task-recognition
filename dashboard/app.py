@@ -48,18 +48,21 @@ def _render_summary(data: dict) -> None:
     duration = data["session_duration"]
     avg_s    = cycles.get("avg_s")
     count    = cycles.get("count", 0)
-    in_order     = cycles.get("count_in_order", 0)
-    out_of_order = cycles.get("count_out_of_order", 0)
+    in_order          = cycles.get("count_in_order", 0)
+    prob_complete     = cycles.get("count_probably_complete", 0)
+    anomalies         = cycles.get("count_anomalies", 0)
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     avg_display = "—"
     if avg_s:
         avg_display = _fmt_seconds(avg_s)
 
-    c1.metric("Ciclos completos",     count)
-    c2.metric("Tempo médio de ciclo", avg_display)
-    c3.metric("Ordem correta",        f"{in_order} / {count}")
-    c4.metric("Duração da sessão",    _fmt_seconds(duration))
+    c1.metric("Ciclos completos",          count)
+    c2.metric("Tempo médio de ciclo",      avg_display)
+    c3.metric("Em ordem",                  in_order)
+    c4.metric("Provavelmente completo",    prob_complete)
+    c5.metric("Anomalias",                 anomalies)
+    c6.metric("Duração da sessão",         _fmt_seconds(duration))
 
 
 def _render_time_breakdown(data: dict) -> None:

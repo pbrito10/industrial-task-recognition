@@ -51,7 +51,7 @@ class MetricsCalculator:
 
         Chamado pelo _MonitorSession sempre que o CycleTracker fecha um ciclo.
         """
-        self._cycle_metrics.add(cycle_result.duration, cycle_result.sequence_in_order)
+        self._cycle_metrics.add(cycle_result.duration, cycle_result.sequence_in_order, cycle_result.is_anomaly)
 
     def snapshot(self) -> MetricsSnapshot:
         now              = datetime.now()

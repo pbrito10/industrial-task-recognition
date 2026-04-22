@@ -23,6 +23,7 @@ _COLUMNS = [
     "cycle_number",
     "sequence_in_order",
     "actual_sequence",
+    "is_anomaly",
 ]
 
 
@@ -94,8 +95,9 @@ class DebugLogger:
             "frame_idx":         "",
             "duration_s":        round(cycle_result.duration.total_seconds(), 3),
             "cycle_number":      cycle_result.cycle_number,
-            "sequence_in_order": str(cycle_result.sequence_in_order).lower(),
+            "sequence_in_order": "" if cycle_result.sequence_in_order is None else str(cycle_result.sequence_in_order).lower(),
             "actual_sequence":   " → ".join(cycle_result.actual_sequence),
+            "is_anomaly":        str(cycle_result.is_anomaly).lower(),
         })
 
     def _write_zone_row(
@@ -127,6 +129,7 @@ class DebugLogger:
             "cycle_number":      "",
             "sequence_in_order": "",
             "actual_sequence":   "",
+            "is_anomaly":        "",
         })
 
     def _write_task_row(self, event_type: str, task_event: TaskEvent) -> None:
@@ -149,6 +152,7 @@ class DebugLogger:
             "cycle_number":      task_event.cycle_number,
             "sequence_in_order": "",
             "actual_sequence":   "",
+            "is_anomaly":        "",
         })
 
     def _write(self, row: dict) -> None:

@@ -15,5 +15,6 @@ class CycleResult:
 
     duration:           timedelta
     cycle_number:       int
-    sequence_in_order:  bool        # True se as zonas foram visitadas na ordem de cycle_zone_order
-    actual_sequence:    list[str]   # Sequência real de zonas visitadas neste ciclo
+    sequence_in_order:  bool | None  # True/False se determinável; None se anomalia (deteção falhou)
+    actual_sequence:    list[str]    # Sequência real de zonas visitadas neste ciclo
+    is_anomaly:         bool = False # True se sequência incompleta e duração fora do intervalo histórico

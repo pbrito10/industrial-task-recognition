@@ -49,18 +49,27 @@ class CycleTracker:
     (was_forced=False). Timeouts acumulam-se no ciclo mas não o fecham —
     uma interrupção não é uma saída real.
 
+    Para sequências incompletas (zonas em falta ou fora de ordem), o ciclo
+    só é aceite se a duração estiver dentro do intervalo [min, max] dos ciclos
+    já registados — filtra falsos positivos de "Porca → Saída direto" sem
+    precisar de um valor fixo. Enquanto não há histórico, aceita sempre
+    (os primeiros ciclos estabelecem a referência).
+
     Tarefas was_forced=True também são excluídas da validação de ordem,
     porque representam tempo de espera, não passos de montagem.
     """
 
     def __init__(self, exit_zone: str, expected_order: list[str]) -> None:
-        self._exit_zone:        str             = exit_zone
-        self._expected_order:   list[str]       = expected_order
-        self._tasks_in_cycle:   list[TaskEvent] = []
-        self._completed_cycles: int             = 0
+        self._exit_zone:        str              = exit_zone
+        self._expected_order:   list[str]        = expected_order
+        self._tasks_in_cycle:   list[TaskEvent]  = []
+        self._completed_cycles: int              = 0
         # Sem ordem definida o ciclo abre imediatamente; caso contrário aguarda
         # a primeira zona (expected_order[0]) para garantir arranque correto.
-        self._cycle_open: bool = not bool(expected_order)
+        self._cycle_open:       bool             = not bool(expected_order)
+        self._min_recorded:     timedelta | None = None
+        self._max_recorded:     timedelta | None = None
+        self._reference_count:  int              = 0  # ciclos não-anómalos usados como referência
 
     def record(self, event: TaskEvent) -> CycleResult | None:
         """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
@@ -74,7 +83,7 @@ class CycleTracker:
         self._tasks_in_cycle.append(event)
 
         if self._is_cycle_complete(event):
-            return self._close_cycle()
+            return self._try_close_cycle(event)
 
         return None
 
@@ -90,12 +99,47 @@ class CycleTracker:
     def _is_cycle_complete(self, event: TaskEvent) -> bool:
         return event.zone_name == self._exit_zone and not event.was_forced
 
-    def _close_cycle(self) -> CycleResult:
-        """Fecha o ciclo atual, valida a ordem, reinicia o acumulador e devolve o resultado."""
+    def _try_close_cycle(self, closing_event: TaskEvent) -> CycleResult:
+        """Fecha o ciclo, marcando-o como anomalia se aplicável.
+
+        Sequência correta e completa → fecha normalmente.
+        Sequência incompleta + duração fora do intervalo histórico → anomalia.
+        Sequência incompleta + sem histórico ainda → aceita (primeiros ciclos
+        estabelecem a referência).
+        """
         actual_sequence   = [t.zone_name for t in self._tasks_in_cycle if not t.was_forced]
         sequence_in_order = _matches_order(actual_sequence, self._expected_order)
-        duration          = self._tasks_in_cycle[-1].end_time - self._tasks_in_cycle[0].start_time
-        cycle_number      = self._completed_cycles + 1
+
+        if sequence_in_order:
+            return self._close_cycle(actual_sequence, True, False)
+
+        # Sequência incompleta: só classifica como anomalia com >= 2 referências
+        is_anomaly = False
+        if self._reference_count >= 2:
+            duration = closing_event.end_time - self._tasks_in_cycle[0].start_time
+            if not (self._min_recorded <= duration <= self._max_recorded):
+                is_anomaly = True
+
+        # Ordem não determinável — pode ser falha de deteção ou sequência errada
+        return self._close_cycle(actual_sequence, None, is_anomaly)
+
+    def _close_cycle(
+        self,
+        actual_sequence:   list[str],
+        sequence_in_order: bool | None,
+        is_anomaly:        bool,
+    ) -> CycleResult:
+        """Fecha o ciclo e atualiza o intervalo histórico (apenas ciclos não-anómalos)."""
+        duration     = self._tasks_in_cycle[-1].end_time - self._tasks_in_cycle[0].start_time
+        cycle_number = self._completed_cycles + 1
+
+        # Anomalias não actualizam o intervalo nem a contagem de referência
+        if not is_anomaly:
+            if self._min_recorded is None or duration < self._min_recorded:
+                self._min_recorded = duration
+            if self._max_recorded is None or duration > self._max_recorded:
+                self._max_recorded = duration
+            self._reference_count += 1
 
         self._tasks_in_cycle    = []
         self._completed_cycles += 1
@@ -106,4 +150,5 @@ class CycleTracker:
             cycle_number=cycle_number,
             sequence_in_order=sequence_in_order,
             actual_sequence=actual_sequence,
+            is_anomaly=is_anomaly,
         )

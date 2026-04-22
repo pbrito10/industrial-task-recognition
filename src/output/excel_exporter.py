@@ -15,8 +15,16 @@ from src.tracking.task_event import TaskEvent
 _BOTTLENECK_FILL = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
 _HEADER_FONT     = Font(bold=True)
 
-# Mapeamento direto para evitar ternário aninhado em _write_cycles
+# Mapeamento direto para evitar ternário aninhado em _write_events
 _ORDER_LABEL: dict[bool | None, str] = {True: "Sim", False: "Não", None: "—"}
+
+
+def _cycle_state_label(sequence_in_order: bool | None, is_anomaly: bool) -> str:
+    if is_anomaly:
+        return "Anomalia"
+    if sequence_in_order is True:
+        return "Em ordem"
+    return "Provavelmente completo"
 
 
 class ExcelExporter(OutputInterface):
@@ -31,8 +39,9 @@ class ExcelExporter(OutputInterface):
     def __init__(self, output_dir: Path, session_start: datetime) -> None:
         self._output_dir    = output_dir
         self._session_start = session_start
-        self._events:       list[TaskEvent]  = []
-        self._cycle_order:  dict[int, bool]  = {}  # cycle_number → sequence_in_order
+        self._events:         list[TaskEvent]  = []
+        self._cycle_order:    dict[int, bool]  = {}  # cycle_number → sequence_in_order
+        self._cycle_anomaly:  dict[int, bool]  = {}  # cycle_number → is_anomaly
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -41,8 +50,9 @@ class ExcelExporter(OutputInterface):
         self._events.append(event)
 
     def add_cycle_result(self, cycle_result: CycleResult) -> None:
-        """Regista se as zonas do ciclo foram visitadas na sequência correta."""
-        self._cycle_order[cycle_result.cycle_number] = cycle_result.sequence_in_order
+        """Regista ordem e anomalia do ciclo para exportação."""
+        self._cycle_order[cycle_result.cycle_number]   = cycle_result.sequence_in_order
+        self._cycle_anomaly[cycle_result.cycle_number] = cycle_result.is_anomaly
 
     def write(self, snapshot: MetricsSnapshot) -> None:
         """Gera o ficheiro Excel com todas as folhas."""
@@ -115,15 +125,16 @@ class ExcelExporter(OutputInterface):
         rows = []
         for cycle_number, events in sorted(cycles.items()):
             sequence_in_order = self._cycle_order.get(cycle_number, None)
+            is_anomaly        = self._cycle_anomaly.get(cycle_number, False)
             start    = min(e.start_time for e in events)
             end      = max(e.end_time   for e in events)
             duration = round((end - start).total_seconds(), 2)
             rows.append({
-                "Nº Ciclo":           cycle_number,
-                "Início":             start.strftime("%H:%M:%S"),
-                "Fim":                end.strftime("%H:%M:%S"),
-                "Duração (s)":        duration,
-                "Sequência Correta":  _ORDER_LABEL.get(sequence_in_order, "—"),
+                "Nº Ciclo":    cycle_number,
+                "Início":      start.strftime("%H:%M:%S"),
+                "Fim":         end.strftime("%H:%M:%S"),
+                "Duração (s)": duration,
+                "Estado":      _cycle_state_label(sequence_in_order, is_anomaly),
             })
 
         df = pd.DataFrame(rows)
