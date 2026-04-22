@@ -2,14 +2,15 @@ from enum import Enum
 
 
 class EventType(Enum):
-    """Tipo de evento gerado quando uma mão entra ou sai de uma zona.
+    """Tipos de evento escritos no CSV de debug pelo DebugLogger.
 
-    Enum em vez de string pelas mesmas razões que HandSide — um conjunto
-    fixo e conhecido de valores deve ser um tipo, não strings livres.
-
-    Cada ENTER deve ter um EXIT correspondente, exceto se a sessão
-    terminar com a mão ainda dentro da zona.
+    Enum em vez de strings livres — um conjunto fixo de valores deve ser
+    um tipo, não magic strings duplicadas em vários ficheiros.
     """
 
-    ENTER = "ENTER"
-    EXIT  = "EXIT"
+    ZONE_ENTER     = "ZONE_ENTER"
+    ZONE_EXIT      = "ZONE_EXIT"
+    TASK_COMPLETE  = "TASK_COMPLETE"
+    TASK_TIMEOUT   = "TASK_TIMEOUT"
+    CYCLE_COMPLETE = "CYCLE_COMPLETE"
+    DETECTION_GAP  = "DETECTION_GAP"

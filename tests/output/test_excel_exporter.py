@@ -154,7 +154,7 @@ def test_cycles_sequence_in_order_label(exporter, tmp_path):
     wb     = _open_workbook(tmp_path)
     ws     = wb["Ciclos"]
     values = [ws.cell(row=r, column=5).value for r in range(2, ws.max_row + 1)]
-    assert "Sim" in values
+    assert "Em ordem" in values
 
 
 def test_cycles_out_of_order_label(exporter, tmp_path):
@@ -164,7 +164,7 @@ def test_cycles_out_of_order_label(exporter, tmp_path):
     wb     = _open_workbook(tmp_path)
     ws     = wb["Ciclos"]
     values = [ws.cell(row=r, column=5).value for r in range(2, ws.max_row + 1)]
-    assert "Não" in values
+    assert "Provavelmente completo" in values
 
 
 # --- Folha Eventos ---

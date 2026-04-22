@@ -2,7 +2,6 @@ import json
 import time
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 import yaml
 
@@ -41,7 +40,7 @@ def _fmt_seconds(s: float) -> str:
 # ── Secções do dashboard ──────────────────────────────────────────────────────
 
 def _render_summary(data: dict) -> None:
-    """Secção 1 — Total, ciclos corretos, anomalias, tempo médio e duração da sessão."""
+    """Ciclos corretos, anomalias, tempo médio (corretos) e duração da sessão."""
     st.subheader("Resumo da Sessão")
 
     cycles   = data["cycle_metrics"]
@@ -50,15 +49,13 @@ def _render_summary(data: dict) -> None:
     count    = cycles.get("count", 0)
 
     # Ciclo correto = todas as zonas na sequência correta com todos os dwells.
-    # Tudo o resto (sequência incompleta, fora de ordem, duração suspeita) é anomalia.
+    # Tudo o resto é anomalia.
     correct   = cycles.get("count_in_order", 0)
     anomalies = cycles.get("count_probably_complete", 0) + cycles.get("count_anomalies", 0)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    avg_display = "—"
-    if avg_s:
-        avg_display = _fmt_seconds(avg_s)
+    avg_display = _fmt_seconds(avg_s) if avg_s else "—"
 
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Total de ciclos",      count)
     c2.metric("Ciclos corretos",      correct)
     c3.metric("Anomalias",            anomalies)
@@ -67,7 +64,7 @@ def _render_summary(data: dict) -> None:
 
 
 def _render_time_breakdown(data: dict) -> None:
-    """Secção 2 — Decomposição produtivo / transição / interrupção."""
+    """Decomposição produtivo / transição / interrupção."""
     st.subheader("Decomposição do Tempo")
 
     bd = data["time_breakdown"]
@@ -77,85 +74,10 @@ def _render_time_breakdown(data: dict) -> None:
     c3.metric("Interrupções", f"{bd['interruption_pct']:.1f} %")
 
 
-def _render_zone_table(data: dict) -> None:
-    """Secção 3 — Tabela de métricas por zona com gargalo destacado."""
-    st.subheader("Métricas por Zona")
-
-    task       = data.get("task_metrics", {})
-    bottleneck = data.get("bottleneck_zone")
-
-    if not task:
-        st.info("Ainda sem tarefas confirmadas.")
-        return
-
-    rows = [
-        {
-            "Zona":          zone,
-            "Ocorrências":   m["count"],
-            "Mín (s)":       m["min_s"],
-            "Médio (s)":     m["avg_s"],
-            "Máx (s)":       m["max_s"],
-            "Desvio Pad.":   m["std_dev_s"],
-        }
-        for zone, m in task.items()
-    ]
-
-    df = pd.DataFrame(rows).set_index("Zona")
-
-    def _highlight(row):
-        bg = ""
-        if row.name == bottleneck:
-            bg = "background-color: #ff4b4b33"
-        return [bg] * len(row)
-
-    styled = (
-        df.style
-        .apply(_highlight, axis=1)
-        .format("{:.3f}", subset=["Mín (s)", "Médio (s)", "Máx (s)", "Desvio Pad."])
-    )
-    st.dataframe(styled, use_container_width=True)
-
-    if bottleneck:
-        st.caption(f"Gargalo: {bottleneck} (maior tempo médio)")
-
-
-def _render_charts(data: dict) -> None:
-    """Secção 4 — Gráficos: tempo médio por zona e decomposição do tempo."""
-    task = data.get("task_metrics", {})
-
-    st.subheader("Gráficos")
-
-    if not task:
-        st.info("Ainda sem dados para graficar.")
-        return
-
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.caption("Tempo médio por zona (s)")
-        df_avg = pd.DataFrame(
-            {"Tempo médio (s)": {zone: m["avg_s"] for zone, m in task.items()}}
-        )
-        st.bar_chart(df_avg)
-
-    with col_right:
-        st.caption("Decomposição do tempo (%)")
-        bd = data["time_breakdown"]
-        df_bd = pd.DataFrame({
-            "Tipo": ["Produtivo", "Transição", "Interrupções"],
-            "% Tempo": [bd["productive_pct"], bd["transition_pct"], bd["interruption_pct"]],
-        }).set_index("Tipo")
-        st.bar_chart(df_bd)
-
-
 def _render(data: dict) -> None:
     _render_summary(data)
     st.divider()
     _render_time_breakdown(data)
-    st.divider()
-    _render_zone_table(data)
-    st.divider()
-    _render_charts(data)
 
     captured = data.get("captured_at", "").replace("T", " ")
     st.caption(f"Última atualização: {captured}")

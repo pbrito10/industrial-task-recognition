@@ -50,6 +50,7 @@ tracking:
     - "Montagem"
     - "Saida"
   exit_zone: "Saida"     # zona cuja conclusão fecha o ciclo
+  detection_gap_threshold_s: 1.0  # gap mínimo sem deteção (s) para registar no CSV
 
 dashboard:
   data_path: "dashboard/data/metrics.json"

@@ -206,10 +206,43 @@ def correr_programa(config):
         dashboard_proc.terminate()
 
 
+def analisar_sessao(config):
+    """Lista os CSVs de debug disponíveis e gera a tabela de anomalias para o escolhido."""
+    from analysis.session_analysis import build_table, _save_table
+
+    output_dir = Path(config["output"]["excel_output_dir"])
+    csvs       = sorted(output_dir.glob("debug_*.csv"), reverse=True)
+
+    if not csvs:
+        print(f"Nenhum ficheiro de sessão encontrado em '{output_dir}'.")
+        return
+
+    print("\nFicheiros disponíveis:")
+    for i, csv_path in enumerate(csvs, start=1):
+        print(f"  {i}. {csv_path.name}")
+
+    escolha = input("Escolha (número): ").strip()
+    if not escolha.isdigit() or not (1 <= int(escolha) <= len(csvs)):
+        print("Opção inválida.")
+        return
+
+    csv_path = csvs[int(escolha) - 1]
+    print(f"A analisar {csv_path.name}...")
+
+    table  = build_table(csv_path)
+    output = _save_table(table, csv_path)
+
+    total    = len(table)
+    corretos = (table["Estado"] == "Correto").sum()
+    print(f"Tabela guardada: {output.name}")
+    print(f"Total: {total} ciclos  |  Corretos: {corretos}  |  Anomalias: {total - corretos}")
+
+
 _OPCOES = {
-    "1": ("Testar câmara",   testar_camera),
-    "2": ("Definir ROIs",    definir_rois),
-    "3": ("Correr programa", correr_programa),
+    "1": ("Testar câmara",      testar_camera),
+    "2": ("Definir ROIs",       definir_rois),
+    "3": ("Correr programa",    correr_programa),
+    "4": ("Analisar sessão",    analisar_sessao),
 }
 
 

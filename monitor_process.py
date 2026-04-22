@@ -67,6 +67,73 @@ class _ZoneTransitionTracker:
             debug_logger.log_zone_enter(now, relative, curr_zone, detection, frame_idx)
 
 
+class _DetectionGapTracker:
+    """Deteta períodos sem deteção de mãos e regista-os no DebugLogger.
+
+    Um gap só é registado quando as mãos reaparecem (ou no fim da sessão),
+    porque só então se conhece a duração real. Gaps abaixo do threshold
+    são ignorados — correspondem a falhas de deteção pontuais inevitáveis.
+
+    Quando o gap excede o threshold, guarda também o primeiro frame sem deteção
+    como JPEG — permite confirmar visualmente se a mão estava lá (falha do
+    MediaPipe) ou genuinamente ausente (abandono/interrupção).
+    """
+
+    def __init__(self, threshold_s: float, session_start, output_dir, cycle_number_fn) -> None:
+        from datetime import timedelta
+        self._threshold        = timedelta(seconds=threshold_s)
+        self._session_start    = session_start
+        self._output_dir       = output_dir
+        self._cycle_number_fn  = cycle_number_fn
+        self._gap_start        = None  # datetime | None
+        self._gap_frame        = None  # primeiro frame RGB sem deteção
+        self._gaps_per_cycle:  dict[int, int] = {}  # ciclo → nº de gaps já guardados
+
+    def update(self, has_detections: bool, now, frame_rgb, debug_logger) -> None:
+        """Chama por frame. has_detections=True se pelo menos uma mão foi detetada."""
+        if not has_detections:
+            if self._gap_start is None:
+                self._gap_start = now
+                self._gap_frame = frame_rgb  # guarda o primeiro frame do gap
+            return
+
+        if self._gap_start is not None:
+            self._flush(now, debug_logger)
+
+    def flush(self, now, debug_logger) -> None:
+        """Chama no fim da sessão para fechar um gap ainda em aberto."""
+        if self._gap_start is not None:
+            self._flush(now, debug_logger)
+
+    def _flush(self, now, debug_logger) -> None:
+        duration = now - self._gap_start
+        if duration >= self._threshold:
+            relative = self._gap_start - self._session_start
+            debug_logger.log_detection_gap(self._gap_start, relative, duration)
+            self._save_frame()
+        self._gap_start = None
+        self._gap_frame = None
+
+    def _save_frame(self) -> None:
+        """Guarda o primeiro frame do gap como JPEG nomeado pelo ciclo atual."""
+        import cv2
+        import numpy as np
+
+        if self._gap_frame is None:
+            return
+
+        cycle = self._cycle_number_fn()
+        count = self._gaps_per_cycle.get(cycle, 0) + 1
+        self._gaps_per_cycle[cycle] = count
+
+        # gap_ciclo_002.jpg  ou  gap_ciclo_002_2.jpg se houver mais do que um no mesmo ciclo
+        suffix   = f"_{count}" if count > 1 else ""
+        filename = self._output_dir / f"gap_ciclo_{cycle:03d}{suffix}.jpg"
+
+        frame_bgr = cv2.cvtColor(np.asarray(self._gap_frame), cv2.COLOR_RGB2BGR)
+        cv2.imwrite(str(filename), frame_bgr)
+
+
 class _MonitorSession:
     """Orquestrador da sessão de monitorização.
 
@@ -104,6 +171,13 @@ class _MonitorSession:
         self._cycle_tracker    = CycleTracker(
             exit_zone=config["tracking"]["exit_zone"],
             expected_order=config["tracking"]["cycle_zone_order"],
+        )
+
+        self._gap_tracker = _DetectionGapTracker(
+            threshold_s=config["tracking"]["detection_gap_threshold_s"],
+            session_start=self._session_start,
+            output_dir=Path(config["output"]["excel_output_dir"]),
+            cycle_number_fn=self._cycle_tracker.current_cycle_number,
         )
         self._metrics          = MetricsCalculator(self._session_start, config["tracking"]["zones"])
         self._dashboard_writer = DashboardWriter(Path(config["dashboard"]["data_path"]))
@@ -149,7 +223,7 @@ class _MonitorSession:
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     stop_event.set()
         finally:
-            self._finalise()
+            self._finalise(debug_logger)
             cv2.destroyAllWindows()
 
     def _process_frame(self, frame_rgb, maos, debug_logger) -> None:
@@ -157,6 +231,8 @@ class _MonitorSession:
 
         self._frame_idx += 1
         now = datetime.now()
+
+        self._gap_tracker.update(bool(maos), now, frame_rgb, debug_logger)
 
         classified_hands = self._zone_classifier.classify(maos)
         self._transition_tracker.track(classified_hands, now, self._frame_idx, debug_logger)
@@ -200,7 +276,9 @@ class _MonitorSession:
             self._dashboard_writer.write(self._metrics.snapshot())
             self._last_dashboard_write = now
 
-    def _finalise(self) -> None:
+    def _finalise(self, debug_logger) -> None:
+        from datetime import datetime
+        self._gap_tracker.flush(datetime.now(), debug_logger)
         snapshot = self._metrics.snapshot()
         self._dashboard_writer.write(snapshot)
         self._excel_exporter.write(snapshot)

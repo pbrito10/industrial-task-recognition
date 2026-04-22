@@ -16,13 +16,13 @@ _BOTTLENECK_FILL = PatternFill(start_color="FFD966", end_color="FFD966", fill_ty
 _HEADER_FONT     = Font(bold=True)
 
 # Mapeamento direto para evitar ternário aninhado em _write_events
-_ORDER_LABEL: dict[bool | None, str] = {True: "Sim", False: "Não", None: "—"}
+_FORCED_LABEL: dict[bool, str] = {True: "Sim", False: "Não"}
 
 
-def _cycle_state_label(sequence_in_order: bool | None, is_anomaly: bool) -> str:
+def _cycle_state_label(sequence_in_order: bool, is_anomaly: bool) -> str:
     if is_anomaly:
         return "Anomalia"
-    if sequence_in_order is True:
+    if sequence_in_order:
         return "Em ordem"
     return "Provavelmente completo"
 
@@ -40,7 +40,7 @@ class ExcelExporter(OutputInterface):
         self._output_dir    = output_dir
         self._session_start = session_start
         self._events:         list[TaskEvent]  = []
-        self._cycle_order:    dict[int, bool]  = {}  # cycle_number → sequence_in_order
+        self._cycle_order: dict[int, bool] = {}  # cycle_number → sequence_in_order
         self._cycle_anomaly:  dict[int, bool]  = {}  # cycle_number → is_anomaly
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -124,7 +124,7 @@ class ExcelExporter(OutputInterface):
 
         rows = []
         for cycle_number, events in sorted(cycles.items()):
-            sequence_in_order = self._cycle_order.get(cycle_number, None)
+            sequence_in_order = self._cycle_order.get(cycle_number, False)
             is_anomaly        = self._cycle_anomaly.get(cycle_number, False)
             start    = min(e.start_time for e in events)
             end      = max(e.end_time   for e in events)
@@ -150,7 +150,7 @@ class ExcelExporter(OutputInterface):
                 "Início":      event.start_time.strftime("%H:%M:%S.%f")[:-3],
                 "Fim":         event.end_time.strftime("%H:%M:%S.%f")[:-3],
                 "Duração (s)": round(event.duration.total_seconds(), 3),
-                "Forçado":     _ORDER_LABEL[event.was_forced],
+                "Forçado":     _FORCED_LABEL[event.was_forced],
             }
             for event in self._events
         ]

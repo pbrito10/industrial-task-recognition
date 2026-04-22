@@ -14,11 +14,18 @@ def test_count_in_order():
     assert m.count_in_order() == 2
 
 
-def test_count_out_of_order():
+def test_count_probably_complete():
     m = CycleMetrics()
     m.add(_td(10), sequence_in_order=True)
-    m.add(_td(12), sequence_in_order=False)
-    assert m.count_out_of_order() == 1
+    m.add(_td(12), sequence_in_order=False)   # provavelmente completo
+    assert m.count_probably_complete() == 1
+
+
+def test_count_anomalies():
+    m = CycleMetrics()
+    m.add(_td(10), sequence_in_order=True)
+    m.add(_td(12), sequence_in_order=False, is_anomaly=True)
+    assert m.count_anomalies() == 1
 
 
 def test_total_count():
@@ -32,4 +39,5 @@ def test_empty_counts_zero():
     m = CycleMetrics()
     assert m.count() == 0
     assert m.count_in_order() == 0
-    assert m.count_out_of_order() == 0
+    assert m.count_probably_complete() == 0
+    assert m.count_anomalies() == 0

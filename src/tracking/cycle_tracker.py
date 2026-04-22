@@ -75,10 +75,9 @@ class CycleTracker:
         """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
         if not self._cycle_open:
             # Só abre na primeira zona esperada (e nunca em eventos forçados)
-            if not event.was_forced and event.zone_name == self._expected_order[0]:
-                self._cycle_open = True
-            else:
+            if event.was_forced or event.zone_name != self._expected_order[0]:
                 return None
+            self._cycle_open = True
 
         self._tasks_in_cycle.append(event)
 
@@ -120,13 +119,12 @@ class CycleTracker:
             if not (self._min_recorded <= duration <= self._max_recorded):
                 is_anomaly = True
 
-        # Ordem não determinável — pode ser falha de deteção ou sequência errada
-        return self._close_cycle(actual_sequence, None, is_anomaly)
+        return self._close_cycle(actual_sequence, False, is_anomaly)
 
     def _close_cycle(
         self,
         actual_sequence:   list[str],
-        sequence_in_order: bool | None,
+        sequence_in_order: bool,
         is_anomaly:        bool,
     ) -> CycleResult:
         """Fecha o ciclo e atualiza o intervalo histórico (apenas ciclos não-anómalos)."""
