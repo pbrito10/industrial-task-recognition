@@ -60,10 +60,14 @@ class DashboardWriter(OutputInterface):
         metrics = snapshot.cycle_metrics
         if metrics.count() == 0:
             return {"count": 0}
+
+        correct_avg  = metrics.correct_average()
+        avg_s        = round(correct_avg.total_seconds(), 3) if correct_avg else None
+
         return {
             "count":              metrics.count(),
             "min_s":              round(metrics.minimum().total_seconds(), 3),
-            "avg_s":              round(metrics.average().total_seconds(), 3),
+            "avg_s":              avg_s,  # apenas ciclos corretos (sequence_in_order=True)
             "max_s":              round(metrics.maximum().total_seconds(), 3),
             "std_dev_s":          round(metrics.std_deviation().total_seconds(), 3),
             "count_in_order":          metrics.count_in_order(),
