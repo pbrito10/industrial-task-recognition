@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 import yaml
 
-if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+if not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":0"
 
 _SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"

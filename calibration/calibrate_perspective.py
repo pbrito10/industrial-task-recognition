@@ -26,7 +26,7 @@ import numpy as np
 import yaml
 
 # Quando em SSH, força o display físico da máquina remota
-if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+if not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":0"
 
 _SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
