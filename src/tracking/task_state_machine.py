@@ -260,21 +260,13 @@ class TwoHandsStateMachine(_BaseStateMachine):
             self._reset_to_idle()
             return
 
-        both_still = all(
-            self._strategy.is_active(hand, self._prev_detections.get(hand.hand_side))
-            for hand in hands
-        )
-
-        if not both_still:
-            self._dwell_start = None
-        elif self._dwell_start is None:
+        # Dwell por tempo simples — sem requisito de stillness porque numa zona
+        # de duas mãos o operador está ativamente a montar (mãos em movimento).
+        if self._dwell_start is None:
             self._dwell_start = frame_time
         elif frame_time - self._dwell_start >= self._dwell_time:
             self._task_state = TaskState.TASK_IN_PROGRESS
             self._task_start = frame_time
-
-        for hand in hands:
-            self._prev_detections[hand.hand_side] = hand
 
     def _handle_in_progress(
         self,

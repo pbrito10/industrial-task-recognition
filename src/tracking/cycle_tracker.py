@@ -40,6 +40,11 @@ def _matches_order(actual: list[str], expected: list[str]) -> bool:
 class CycleTracker:
     """Deteta ciclos completos acumulando TaskEvents até à zona de saída.
 
+    Um ciclo só abre quando a primeira zona de expected_order é visitada —
+    eventos anteriores (ex: mãos na Montagem antes de ir à Porca) são ignorados.
+    Isto evita ciclos falsos no arranque e impede que ir direto à Saída feche
+    um ciclo sem ter feito nenhum trabalho.
+
     Um ciclo só fecha quando a zona de saída é concluída normalmente
     (was_forced=False). Timeouts acumulam-se no ciclo mas não o fecham —
     uma interrupção não é uma saída real.
@@ -53,9 +58,19 @@ class CycleTracker:
         self._expected_order:   list[str]       = expected_order
         self._tasks_in_cycle:   list[TaskEvent] = []
         self._completed_cycles: int             = 0
+        # Sem ordem definida o ciclo abre imediatamente; caso contrário aguarda
+        # a primeira zona (expected_order[0]) para garantir arranque correto.
+        self._cycle_open: bool = not bool(expected_order)
 
     def record(self, event: TaskEvent) -> CycleResult | None:
         """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
+        if not self._cycle_open:
+            # Só abre na primeira zona esperada (e nunca em eventos forçados)
+            if not event.was_forced and event.zone_name == self._expected_order[0]:
+                self._cycle_open = True
+            else:
+                return None
+
         self._tasks_in_cycle.append(event)
 
         if self._is_cycle_complete(event):
@@ -84,6 +99,7 @@ class CycleTracker:
 
         self._tasks_in_cycle    = []
         self._completed_cycles += 1
+        self._cycle_open        = not bool(self._expected_order)
 
         return CycleResult(
             duration=duration,

@@ -22,6 +22,7 @@ _COLUMNS = [
     "duration_s",
     "cycle_number",
     "sequence_in_order",
+    "actual_sequence",
 ]
 
 
@@ -94,6 +95,7 @@ class DebugLogger:
             "duration_s":        round(cycle_result.duration.total_seconds(), 3),
             "cycle_number":      cycle_result.cycle_number,
             "sequence_in_order": str(cycle_result.sequence_in_order).lower(),
+            "actual_sequence":   " → ".join(cycle_result.actual_sequence),
         })
 
     def _write_zone_row(
@@ -124,6 +126,7 @@ class DebugLogger:
             "duration_s":        "",
             "cycle_number":      "",
             "sequence_in_order": "",
+            "actual_sequence":   "",
         })
 
     def _write_task_row(self, event_type: str, task_event: TaskEvent) -> None:
@@ -145,6 +148,7 @@ class DebugLogger:
             "duration_s":        round(task_event.duration.total_seconds(), 3),
             "cycle_number":      task_event.cycle_number,
             "sequence_in_order": "",
+            "actual_sequence":   "",
         })
 
     def _write(self, row: dict) -> None:
