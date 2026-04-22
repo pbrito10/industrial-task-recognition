@@ -10,7 +10,7 @@ camera:
   perspective_path: ""  # desativado — homografia planar incompatível com mão levantada (parallax)
 
 calibration:
-  checkerboard_size: [7, 5]   # cantos internos (colunas, linhas)
+  checkerboard_size: [6, 4]   # cantos internos (colunas, linhas)
   square_size_mm: 35.0         # tamanho real de cada quadrado em milímetros
   min_captures: 15             # capturas mínimas para correr a calibração
 
