@@ -41,28 +41,29 @@ def _fmt_seconds(s: float) -> str:
 # ── Secções do dashboard ──────────────────────────────────────────────────────
 
 def _render_summary(data: dict) -> None:
-    """Secção 1 — Ciclos, tempo médio de ciclo, ordem e duração da sessão."""
+    """Secção 1 — Total, ciclos corretos, anomalias, tempo médio e duração da sessão."""
     st.subheader("Resumo da Sessão")
 
     cycles   = data["cycle_metrics"]
     duration = data["session_duration"]
     avg_s    = cycles.get("avg_s")
     count    = cycles.get("count", 0)
-    in_order          = cycles.get("count_in_order", 0)
-    prob_complete     = cycles.get("count_probably_complete", 0)
-    anomalies         = cycles.get("count_anomalies", 0)
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    # Ciclo correto = todas as zonas na sequência correta com todos os dwells.
+    # Tudo o resto (sequência incompleta, fora de ordem, duração suspeita) é anomalia.
+    correct   = cycles.get("count_in_order", 0)
+    anomalies = cycles.get("count_probably_complete", 0) + cycles.get("count_anomalies", 0)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
     avg_display = "—"
     if avg_s:
         avg_display = _fmt_seconds(avg_s)
 
-    c1.metric("Ciclos completos",          count)
-    c2.metric("Tempo médio de ciclo",      avg_display)
-    c3.metric("Em ordem",                  in_order)
-    c4.metric("Provavelmente completo",    prob_complete)
-    c5.metric("Anomalias",                 anomalies)
-    c6.metric("Duração da sessão",         _fmt_seconds(duration))
+    c1.metric("Total de ciclos",      count)
+    c2.metric("Ciclos corretos",      correct)
+    c3.metric("Anomalias",            anomalies)
+    c4.metric("Tempo médio de ciclo", avg_display)
+    c5.metric("Duração da sessão",    _fmt_seconds(duration))
 
 
 def _render_time_breakdown(data: dict) -> None:
