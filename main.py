@@ -20,9 +20,9 @@ from pathlib import Path
 
 import yaml
 
-# Quando em SSH, o DISPLAY aponta para o display encaminhado (não funciona localmente).
-# Força sempre o display físico da máquina remota.
-if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_TTY") or not os.environ.get("DISPLAY"):
+# Sem DISPLAY definido (e.g. tty sem sessão gráfica), usa o display físico da máquina.
+# Se DISPLAY já estiver definido (X11 forwarding ativo), não sobrescreve.
+if not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":0"
 
 _CONFIG_PATH = Path(__file__).parent / "config" / "settings.yaml"
