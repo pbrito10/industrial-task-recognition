@@ -1,3 +1,77 @@
+# Estado do Projeto — 27 Abril 2026
+
+## Ponto de Continuidade — mudança para PC do CITIN
+
+### Estado confirmado antes da troca
+- Diretório de trabalho usado nesta sessão: `/home/pedrobrito/Projeto2`
+- Branch atual: `develop`
+- Ambiente Python correto: `.venv/bin/python`
+- Suite completa validada na venv: `235 passed in 1.16s`
+- Último commit observado antes desta nota: `336b834 fix e estruturação`
+
+### O que ficou decidido
+- A validação do programa será feita contra **ground truth manual externo**, não contra a lógica interna do programa.
+- A avaliação será dividida em duas fases:
+  1. **Percentagem de acerto global**: comparar ciclo real (`Correto` / `Anomalia`) com resultado do programa (`Correto` / `Anomalia`).
+  2. **Diagnóstico dos erros**: analisar falsos positivos e falsos negativos para perceber se vieram de perda de mão, ROI/câmara, timeout indevido ou lógica de ciclo.
+- Se o operador fez o ciclo corretamente mas o programa perdeu a mão e marcou anomalia, isso conta como **erro do programa** na Fase 1.
+- A causa desse erro só é explicada depois, na Fase 2.
+- Não foi criada categoria formal `Indeterminada`, para manter a metodologia simples.
+
+### Documento novo de metodologia
+- Criado `docs/metodologia_validacao.md`
+- Inclui:
+  - objetivo da validação;
+  - matriz de confusão;
+  - fórmula de percentagem de acerto;
+  - plano de aplicação;
+  - tabela manual sugerida;
+  - diagnóstico das causas dos erros;
+  - texto pronto para adaptar ao relatório.
+
+### Revisão Clean Code / SOLID / OCP concluída
+Foram corrigidos os pontos levantados, exceto o ponto sobre a Ferramenta 4 usar a config atual para analisar CSVs antigos, que ficou **propositadamente em aberto** para debate posterior.
+
+Alterações principais:
+- Regra de ordem extraída para `src/tracking/order_matching.py`
+- `CycleTracker` e `analysis/session_analysis.py` usam a mesma função `matches_order`
+- `MetricsSnapshot` passou a ser snapshot real por valor, com `TaskMetricSnapshot` e `CycleMetricSnapshot`
+- `CycleResult` passou a guardar `start_time` e `end_time`
+- `ExcelExporter` deixou de reconstruir ciclos a partir de eventos em aberto
+- Validação inicial do `settings.yaml` adicionada em `src/shared/app_config.py`
+- `Camera` separou carga de calibração de lente e perspetiva em métodos privados
+- Cores das ROIs deixaram de depender de nomes hardcoded como `"Montagem"` e `"Saida"`
+- `MediapipeDetector` deixou de importar MediaPipe no topo do módulo; import passou a ser lazy para não bloquear testes unitários
+- Ferramenta 4 corrigida: removido bloco markdown acidental no fim de `analysis/session_analysis.py`
+
+### Testes
+- Comando usado:
+```bash
+.venv/bin/python -m pytest -q
+```
+- Resultado:
+```text
+235 passed in 1.16s
+```
+
+### Para retomar no PC do CITIN
+1. Abrir o projeto via VS Code SSH.
+2. Confirmar branch:
+```bash
+git branch --show-current
+```
+3. Confirmar venv:
+```bash
+.venv/bin/python -m pytest -q
+```
+4. Ler:
+   - `ultimasessao.md`
+   - `docs/metodologia_validacao.md`
+5. Próxima conversa recomendada:
+   - discutir o ponto em aberto: como lidar com análise de CSVs antigos quando o `cycle_zone_order` atual muda.
+
+---
+
 # Estado do Projeto — 22 Abril 2026
 
 ## O que foi feito nesta sessão
