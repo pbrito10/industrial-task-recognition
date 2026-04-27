@@ -43,6 +43,9 @@ class DashboardConfig(TypedDict):
 
 class OutputConfig(TypedDict):
     excel_output_dir: str
+    sessions_subdir: str
+    record_video: bool
+    video_fps: float
 
 
 class AppConfig(TypedDict):
@@ -101,6 +104,9 @@ def validate_config(raw: Any) -> AppConfig:
 
     output = raw["output"]
     _require_type(output, "excel_output_dir", str)
+    _require_type(output, "sessions_subdir", str)
+    _require_type(output, "record_video", bool)
+    _require_number(output, "video_fps")
 
     return cast(AppConfig, raw)
 

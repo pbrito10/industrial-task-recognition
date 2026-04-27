@@ -71,6 +71,7 @@ class DashboardWriter(OutputInterface):
             "max_s":              round(metrics.maximum().total_seconds(), 3),
             "std_dev_s":          round(metrics.std_deviation().total_seconds(), 3),
             "count_in_order":          metrics.count_in_order(),
+            "count_to_review":         metrics.count_to_review(),
             "count_probably_complete": metrics.count_probably_complete(),
             "count_anomalies":         metrics.count_anomalies(),
         }

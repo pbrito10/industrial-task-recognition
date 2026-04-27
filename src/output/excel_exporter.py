@@ -9,23 +9,30 @@ from openpyxl.styles import Font, PatternFill
 from src.output.metrics_snapshot import MetricsSnapshot
 from src.output.output_interface import OutputInterface
 from src.tracking.cycle_result import CycleResult
+from src.tracking.order_matching import diagnose_order
 from src.tracking.task_event import TaskEvent
 
 # Cor de destaque para a zona gargalo (amarelo-âmbar)
 _BOTTLENECK_FILL = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
 _HEADER_FONT     = Font(bold=True)
-_CYCLE_COLUMNS   = ["Nº Ciclo", "Início", "Fim", "Duração (s)", "Estado"]
+_CYCLE_COLUMNS   = [
+    "Nº Ciclo",
+    "Início",
+    "Fim",
+    "Duração (s)",
+    "Resultado do sistema",
+    "Sequência registada",
+    "Problema detetado",
+    "Classificação manual",
+    "Observações",
+]
 
 # Mapeamento direto para evitar ternário aninhado em _write_events
 _FORCED_LABEL: dict[bool, str] = {True: "Sim", False: "Não"}
 
 
-def _cycle_state_label(sequence_in_order: bool, is_anomaly: bool) -> str:
-    if is_anomaly:
-        return "Anomalia"
-    if sequence_in_order:
-        return "Em ordem"
-    return "Provavelmente completo"
+def _cycle_diagnosis(cycle_result: CycleResult):
+    return diagnose_order(cycle_result.actual_sequence, cycle_result.expected_sequence)
 
 
 class ExcelExporter(OutputInterface):
@@ -115,12 +122,17 @@ class ExcelExporter(OutputInterface):
         """Folha 'Ciclos': uma linha por ciclo fechado."""
         rows = []
         for cycle_result in sorted(self._cycle_results.values(), key=lambda cycle: cycle.cycle_number):
+            diagnosis = _cycle_diagnosis(cycle_result)
             rows.append({
-                "Nº Ciclo":    cycle_result.cycle_number,
-                "Início":      cycle_result.start_time.strftime("%H:%M:%S"),
-                "Fim":         cycle_result.end_time.strftime("%H:%M:%S"),
-                "Duração (s)": round(cycle_result.duration.total_seconds(), 2),
-                "Estado":      _cycle_state_label(cycle_result.sequence_in_order, cycle_result.is_anomaly),
+                "Nº Ciclo":             cycle_result.cycle_number,
+                "Início":               cycle_result.start_time.strftime("%H:%M:%S"),
+                "Fim":                  cycle_result.end_time.strftime("%H:%M:%S"),
+                "Duração (s)":          round(cycle_result.duration.total_seconds(), 2),
+                "Resultado do sistema": diagnosis.result,
+                "Sequência registada": " → ".join(cycle_result.actual_sequence),
+                "Problema detetado":    diagnosis.problem,
+                "Classificação manual": "",
+                "Observações":          "",
             })
 
         df = pd.DataFrame(rows, columns=_CYCLE_COLUMNS)

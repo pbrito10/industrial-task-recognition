@@ -2,16 +2,16 @@
 
 ## Objetivo
 
-O objetivo desta validação é medir a confiabilidade do programa na classificação
-dos ciclos de montagem. A avaliação deve comparar o resultado produzido pelo
-sistema com uma referência externa, definida manualmente durante ou após a
+O objetivo desta validação é medir a confiabilidade do programa na avaliação dos
+ciclos de montagem. A avaliação deve comparar o resultado automático produzido
+pelo sistema com uma referência externa, definida manualmente durante ou após a
 sessão de teste.
 
-A validação não deve assumir que uma anomalia detetada pelo programa está
-automaticamente correta. Se o operador executou o ciclo corretamente, mas o
-programa marcou anomalia por ter perdido a mão, esse caso deve contar como erro
-do programa na avaliação global. A causa desse erro é analisada apenas numa fase
-posterior.
+A validação não deve assumir que um ciclo assinalado pelo programa está
+automaticamente incorreto. Se o operador executou o ciclo corretamente, mas o
+programa assinalou uma sequência incompleta ou fora de ordem por ter perdido a
+mão, esse caso deve contar como erro do programa na avaliação global. A causa
+desse erro é analisada apenas numa fase posterior.
 
 ## Fase 1: Percentagem de Acerto Global
 
@@ -23,25 +23,25 @@ Na primeira fase, cada ciclo é avaliado de forma binária:
 Esta classificação é feita manualmente, com base na observação direta, vídeo de
 referência ou registo externo. Ela representa o ground truth da avaliação.
 
-Depois, compara-se esta classificação manual com o resultado produzido pelo
-programa:
+Depois, compara-se esta classificação manual com o resultado automático produzido
+pelo programa:
 
-- `Correto`: o sistema classificou o ciclo como correto.
-- `Anomalia`: o sistema classificou o ciclo como anómalo.
+- `Em ordem`: a sequência registada respeitou a ordem esperada.
+- `A rever`: o sistema detetou sequência incompleta ou fora de ordem.
 
 ### Matriz de Confusão
 
-| Real / Programa | Programa: Correto | Programa: Anomalia |
+| Real / Programa | Programa: Em ordem | Programa: A rever |
 |---|---:|---:|
 | Real: Correto | Verdadeiro Correto | Falso Positivo |
 | Real: Anomalia | Falso Negativo | Verdadeiro Anomalia |
 
 ### Interpretação
 
-- `Verdadeiro Correto`: o ciclo foi realmente correto e o programa classificou como correto.
-- `Verdadeiro Anomalia`: o ciclo foi realmente anómalo e o programa classificou como anomalia.
-- `Falso Positivo`: o ciclo foi realmente correto, mas o programa classificou como anomalia.
-- `Falso Negativo`: o ciclo foi realmente anómalo, mas o programa classificou como correto.
+- `Verdadeiro Correto`: o ciclo foi realmente correto e o programa indicou `Em ordem`.
+- `Verdadeiro Anomalia`: o ciclo foi realmente anómalo e o programa indicou `A rever`.
+- `Falso Positivo`: o ciclo foi realmente correto, mas o programa indicou `A rever`.
+- `Falso Negativo`: o ciclo foi realmente anómalo, mas o programa indicou `Em ordem`.
 
 ### Métrica Principal
 
@@ -70,11 +70,12 @@ que razão o programa falhou.
 | Falso positivo por falha de deteção | O operador fez corretamente, mas o sistema perdeu a mão, falhou a deteção ou registou um gap relevante. |
 | Falso positivo por ROI/câmara | O operador fez corretamente, mas a mão ficou na fronteira da ROI, fora do enquadramento ideal ou a câmara estava mal posicionada. |
 | Falso positivo por timeout indevido | O operador fez corretamente, mas o sistema interpretou uma permanência ou falha momentânea como timeout. |
-| Falso negativo por anomalia não detetada | O operador saltou uma zona, trocou a ordem ou interrompeu o ciclo, mas o programa classificou como correto. |
+| Falso negativo por anomalia não detetada | O operador saltou uma zona, trocou a ordem ou interrompeu o ciclo, mas o programa indicou `Em ordem`. |
 | Falso negativo por tolerância excessiva | O ciclo foi anómalo, mas a lógica de validação aceitou a sequência ou duração como válida. |
 
-Os ficheiros `debug_*.csv`, `gap_ciclo_*.jpg` e o Excel da sessão devem ser
-usados nesta análise para justificar a causa provável de cada erro.
+Os ficheiros da pasta da sessão (`debug_*.csv`, Excel, vídeo anotado e frames em
+`frames/gaps/`) devem ser usados nesta análise para justificar a causa provável
+de cada erro.
 
 ## Plano de Aplicação
 
@@ -86,7 +87,7 @@ Antes de iniciar os testes:
 - definir as ROIs finais da bancada;
 - confirmar a ordem esperada em `cycle_zone_order`;
 - testar a câmara com a opção `1`;
-- correr um ensaio curto para confirmar se o CSV, Excel e dashboard são gerados corretamente.
+- correr um ensaio curto para confirmar se CSV, Excel, vídeo, frames de gap e dashboard são gerados corretamente.
 
 ### 2. Sessão Piloto
 
@@ -133,10 +134,12 @@ ajudar a explicar erros na Fase 2.
 
 No final de cada sessão, guardar:
 
+- pasta completa em `output/sessions/<data_hora>/`;
 - `debug_*.csv`;
 - `sessao_*.xlsx`;
-- `debug_*_anomalias.xlsx`, gerado pela opção `4`;
-- imagens `gap_ciclo_*.jpg`;
+- `debug_*_anomalias.xlsx`, gerado pela opção `5`;
+- vídeo anotado em `video/`;
+- imagens `frames/gaps/gap_ciclo_*.jpg`;
 - tabela manual de ground truth.
 
 ### 5. Cálculo da Percentagem de Acerto
@@ -144,7 +147,7 @@ No final de cada sessão, guardar:
 Para cada ciclo, comparar:
 
 - classificação manual (`Correto` ou `Anomalia`);
-- classificação do programa (`Correto` ou `Anomalia`).
+- resultado do sistema (`Em ordem` ou `A rever`).
 
 Depois, preencher a matriz de confusão e calcular:
 
@@ -165,7 +168,7 @@ Para cada falso positivo e falso negativo:
 
 - consultar o CSV de debug;
 - verificar se houve `DETECTION_GAP`;
-- consultar as imagens `gap_ciclo_*.jpg`;
+- consultar o vídeo anotado e as imagens `frames/gaps/gap_ciclo_*.jpg`;
 - verificar a sequência real registada;
 - verificar timeouts;
 - comparar com as observações manuais.

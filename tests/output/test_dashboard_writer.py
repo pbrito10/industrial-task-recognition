@@ -102,6 +102,7 @@ def test_cycle_metrics_with_data(tmp_path):
     cm_data = data["cycle_metrics"]
     assert cm_data["count"] == 2
     assert cm_data["count_in_order"] == 1
+    assert cm_data["count_to_review"] == 1
     assert cm_data["count_probably_complete"] == 1
     assert "min_s" in cm_data
     assert "avg_s" in cm_data

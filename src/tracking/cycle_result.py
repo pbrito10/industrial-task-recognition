@@ -20,7 +20,9 @@ class CycleResult:
     cycle_number:       int
     sequence_in_order:  bool         # True se todas as zonas na ordem correta; False caso contrário
     actual_sequence:    Sequence[str]  # Sequência real de zonas visitadas neste ciclo
-    is_anomaly:         bool = False # True se sequência incompleta e duração fora do intervalo histórico
+    expected_sequence:  Sequence[str] = () # Sequência esperada usada na validação
+    is_anomaly:         bool = False # Mantido por compatibilidade; validação final é manual
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "actual_sequence", tuple(self.actual_sequence))
+        object.__setattr__(self, "expected_sequence", tuple(self.expected_sequence))

@@ -65,6 +65,7 @@ class _MouseState:
 @dataclass
 class _SessionState:
     selection: _ZoneSelection
+    color_scheme: frame_annotator.ZoneColorScheme | None = None
     mouse: _MouseState = field(default_factory=_MouseState)
 
 
@@ -95,6 +96,7 @@ def _draw_preview(frame: np.ndarray, session: _SessionState) -> None:
     roi   = _compute_drawing_roi("preview", drag.start, current)
     color = frame_annotator.zone_color(
         session.selection.names[session.selection.index],
+        session.color_scheme,
     )
     cv2.rectangle(
         frame,
@@ -107,7 +109,7 @@ def _draw_preview(frame: np.ndarray, session: _SessionState) -> None:
 def _draw_ui_overlay(frame: np.ndarray, session: _SessionState) -> None:
     if session.selection.index is not None:
         zone  = session.selection.names[session.selection.index]
-        color = frame_annotator.zone_color(zone)
+        color = frame_annotator.zone_color(zone, session.color_scheme)
         cv2.putText(frame, f"Zona: {zone}", (10, 30), _FONT, 0.8, color, 2)
 
     warning = None
@@ -123,7 +125,7 @@ def _render(frame: np.ndarray, rois: RoiCollection, session: _SessionState) -> N
     if session.selection.index is not None:
         selected_name = session.selection.names[session.selection.index]
 
-    frame_annotator.draw_rois(frame, rois, selected_name=selected_name)
+    frame_annotator.draw_rois(frame, rois, selected_name=selected_name, color_scheme=session.color_scheme)
     _draw_preview(frame, session)
     _draw_ui_overlay(frame, session)
 
@@ -131,9 +133,17 @@ def _render(frame: np.ndarray, rois: RoiCollection, session: _SessionState) -> N
 class _DrawingSession:
     """Gere estado e interação da sessão de desenho."""
 
-    def __init__(self, zone_names: list[str], rois: RoiCollection) -> None:
+    def __init__(
+        self,
+        zone_names: list[str],
+        rois: RoiCollection,
+        color_scheme: frame_annotator.ZoneColorScheme | None,
+    ) -> None:
         self._rois    = rois
-        self._session = _SessionState(selection=_ZoneSelection(names=zone_names))
+        self._session = _SessionState(
+            selection=_ZoneSelection(names=zone_names),
+            color_scheme=color_scheme,
+        )
 
     @property
     def rois(self) -> RoiCollection:
@@ -235,13 +245,15 @@ class RoiDrawer:
         self,
         camera_factory: Callable[[], Camera],
         zone_names: list[str],
+        color_scheme: frame_annotator.ZoneColorScheme | None = None,
     ) -> None:
         self._camera_factory = camera_factory
         self._zone_names     = zone_names
+        self._color_scheme   = color_scheme
 
     def draw(self, initial_rois: RoiCollection) -> RoiCollection | None:
         camera  = self._camera_factory()
-        session = _DrawingSession(self._zone_names, initial_rois)
+        session = _DrawingSession(self._zone_names, initial_rois, self._color_scheme)
 
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
         cv2.setMouseCallback(_WINDOW_NAME, session.handle_mouse)

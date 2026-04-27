@@ -13,14 +13,21 @@ def _blank(h=200, w=200) -> np.ndarray:
 
 # --- zone_color ---
 
-def test_zone_color_is_stable_for_same_name():
-    assert frame_annotator.zone_color("Montagem") == frame_annotator.zone_color("Montagem")
+def test_zone_color_defaults_to_black():
+    assert frame_annotator.zone_color("ZonaQualquer") == (0, 0, 0)
 
 
-def test_zone_color_returns_bgr_tuple():
-    color = frame_annotator.zone_color("ZonaQualquer")
-    assert len(color) == 3
-    assert all(0 <= channel <= 255 for channel in color)
+def test_zone_color_uses_functional_roles():
+    scheme = frame_annotator.ZoneColorScheme(
+        start_zone="Porca",
+        output_zone="Saida",
+        assembly_zones=("Montagem",),
+    )
+
+    assert frame_annotator.zone_color("Porca", scheme) == (0, 200, 0)
+    assert frame_annotator.zone_color("Saida", scheme) == (255, 0, 0)
+    assert frame_annotator.zone_color("Montagem", scheme) == (0, 165, 255)
+    assert frame_annotator.zone_color("Rodas", scheme) == (0, 0, 0)
 
 
 # --- draw_hand ---
@@ -97,7 +104,7 @@ def test_draw_rois_empty_collection_no_crash():
 
 
 def test_draw_rois_draws_all():
-    frame = _blank()
+    frame = np.full((200, 200, 3), 255, dtype=np.uint8)
     rois  = RoiCollection()
     rois.add(make_roi("Porca",    10, 10, 80,  80))
     rois.add(make_roi("Montagem", 100, 10, 180, 80))
@@ -110,8 +117,8 @@ def test_draw_rois_selected_highlighted():
     roi    = make_roi("Porca", 10, 10, 80, 80)
     rois   = RoiCollection()
     rois.add(roi)
-    f_sel   = _blank()
-    f_nosel = _blank()
+    f_sel   = np.full((200, 200, 3), 255, dtype=np.uint8)
+    f_nosel = np.full((200, 200, 3), 255, dtype=np.uint8)
     frame_annotator.draw_rois(f_sel,   rois, selected_name="Porca")
     frame_annotator.draw_rois(f_nosel, rois, selected_name=None)
     assert f_sel.sum() != f_nosel.sum()

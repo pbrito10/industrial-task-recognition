@@ -58,6 +58,11 @@ def test_filename_contains_session_date(tmp_path):
     assert "2024-03-15" in files[0].name
 
 
+def test_exposes_real_csv_path(tmp_path):
+    with DebugLogger(tmp_path, _SESSION_START) as log:
+        assert log.path == tmp_path / "debug_2024-03-15_09h30.csv"
+
+
 def test_header_has_all_columns(tmp_path):
     with DebugLogger(tmp_path, _SESSION_START):
         pass

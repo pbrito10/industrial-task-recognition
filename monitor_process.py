@@ -79,12 +79,22 @@ class _DetectionGapTracker:
     MediaPipe) ou genuinamente ausente (abandono/interrupção).
     """
 
-    def __init__(self, threshold_s: float, session_start, output_dir, cycle_number_fn) -> None:
+    def __init__(
+        self,
+        threshold_s: float,
+        session_start,
+        output_dir,
+        cycle_number_fn,
+        rois,
+        color_scheme,
+    ) -> None:
         from datetime import timedelta
         self._threshold        = timedelta(seconds=threshold_s)
         self._session_start    = session_start
         self._output_dir       = output_dir
         self._cycle_number_fn  = cycle_number_fn
+        self._rois             = rois
+        self._color_scheme     = color_scheme
         self._gap_start        = None  # datetime | None
         self._gap_frame        = None  # primeiro frame RGB sem deteção
         self._gaps_per_cycle:  dict[int, int] = {}  # ciclo → nº de gaps já guardados
@@ -118,6 +128,7 @@ class _DetectionGapTracker:
         """Guarda o primeiro frame do gap como JPEG nomeado pelo ciclo atual."""
         import cv2
         import numpy as np
+        from src.video import frame_annotator
 
         if self._gap_frame is None:
             return
@@ -128,9 +139,11 @@ class _DetectionGapTracker:
 
         # gap_ciclo_002.jpg  ou  gap_ciclo_002_2.jpg se houver mais do que um no mesmo ciclo
         suffix   = f"_{count}" if count > 1 else ""
+        self._output_dir.mkdir(parents=True, exist_ok=True)
         filename = self._output_dir / f"gap_ciclo_{cycle:03d}{suffix}.jpg"
 
         frame_bgr = cv2.cvtColor(np.asarray(self._gap_frame), cv2.COLOR_RGB2BGR)
+        frame_annotator.draw_rois(frame_bgr, self._rois, color_scheme=self._color_scheme)
         cv2.imwrite(str(filename), frame_bgr)
 
 
@@ -148,10 +161,13 @@ class _MonitorSession:
         from src.metrics.metrics_calculator import MetricsCalculator
         from src.output.dashboard_writer import DashboardWriter
         from src.output.excel_exporter import ExcelExporter
+        from src.output.session_output import create_session_output_layout
+        from src.output.video_recorder import VideoRecorder
         from src.roi.json_roi_repository import JsonRoiRepository
         from src.tracking.activation_strategy import StillnessDwellStrategy
         from src.tracking.cycle_tracker import CycleTracker
         from src.tracking.zone_classifier import ZoneClassifier
+        from src.video.frame_annotator import ZoneColorScheme
 
         self._config        = config
         self._session_start = datetime.now()
@@ -161,6 +177,13 @@ class _MonitorSession:
 
         rois                     = JsonRoiRepository(path=Path(roi_path)).load()
         self._rois               = rois
+        self._session_output     = create_session_output_layout(config, self._session_start)
+        cycle_order              = config["tracking"]["cycle_zone_order"]
+        self._color_scheme       = ZoneColorScheme(
+            start_zone=cycle_order[0] if cycle_order else None,
+            output_zone=config["tracking"]["exit_zone"],
+            assembly_zones=tuple(config["tracking"]["two_hands_zones"]),
+        )
         self._zone_classifier    = ZoneClassifier(rois)
         self._transition_tracker = _ZoneTransitionTracker(self._session_start)
 
@@ -176,12 +199,19 @@ class _MonitorSession:
         self._gap_tracker = _DetectionGapTracker(
             threshold_s=config["tracking"]["detection_gap_threshold_s"],
             session_start=self._session_start,
-            output_dir=Path(config["output"]["excel_output_dir"]),
+            output_dir=self._session_output.gap_frames_dir,
             cycle_number_fn=self._cycle_tracker.current_cycle_number,
+            rois=rois,
+            color_scheme=self._color_scheme,
         )
         self._metrics          = MetricsCalculator(self._session_start, config["tracking"]["zones"])
         self._dashboard_writer = DashboardWriter(Path(config["dashboard"]["data_path"]))
-        self._excel_exporter   = ExcelExporter(Path(config["output"]["excel_output_dir"]), self._session_start)
+        self._excel_exporter   = ExcelExporter(self._session_output.session_dir, self._session_start)
+        self._video_recorder   = VideoRecorder(
+            self._session_output.video_path,
+            fps=config["output"]["video_fps"],
+            enabled=config["output"]["record_video"],
+        )
         self._state_machine    = self._build_state_machine(dwell_time, task_timeout, strategy)
 
     def _build_state_machine(self, dwell_time, task_timeout, strategy):
@@ -198,11 +228,12 @@ class _MonitorSession:
         return TaskStateMachine(one_hand, two_hands, self._config["tracking"]["two_hands_zones"])
 
     def execute(self, detection_queue, stop_event) -> None:
-        from pathlib import Path
         from src.events.debug_logger import DebugLogger
+        from src.output.session_config_snapshot import write_session_config_snapshot
 
-        output_dir = Path(self._config["output"]["excel_output_dir"])
-        with DebugLogger(output_dir, self._session_start) as debug_logger:
+        print(f"Outputs da sessão: {self._session_output.session_dir}")
+        with DebugLogger(self._session_output.session_dir, self._session_start) as debug_logger:
+            write_session_config_snapshot(debug_logger.path, self._config, self._rois)
             self._loop(detection_queue, stop_event, debug_logger)
 
     def _loop(self, detection_queue, stop_event, debug_logger) -> None:
@@ -242,15 +273,28 @@ class _MonitorSession:
             self._handle_task_event(task_event, debug_logger)
 
         self._maybe_refresh_dashboard(now)
-        self._display_frame(frame_rgb, maos)
+        annotated_frame = self._annotate_frame(frame_rgb, maos)
+        self._record_frame(annotated_frame)
+        self._display_frame(annotated_frame)
 
-    def _display_frame(self, frame_rgb, maos) -> None:
+    def _annotate_frame(self, frame_rgb, maos):
         import cv2
         from src.video import frame_annotator
 
         frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
         frame_annotator.draw_detections(frame_bgr, maos)
-        frame_annotator.draw_rois(frame_bgr, self._rois)
+        frame_annotator.draw_rois(frame_bgr, self._rois, color_scheme=self._color_scheme)
+        return frame_bgr
+
+    def _record_frame(self, frame_bgr) -> None:
+        try:
+            self._video_recorder.write(frame_bgr)
+        except RuntimeError as exc:
+            print(f"Aviso: gravação de vídeo desativada. {exc}")
+
+    def _display_frame(self, frame_bgr) -> None:
+        import cv2
+
         cv2.imshow(_WINDOW_NAME, frame_bgr)
 
     def _handle_task_event(self, task_event, debug_logger) -> None:
@@ -278,7 +322,10 @@ class _MonitorSession:
 
     def _finalise(self, debug_logger) -> None:
         from datetime import datetime
-        self._gap_tracker.flush(datetime.now(), debug_logger)
-        snapshot = self._metrics.snapshot()
-        self._dashboard_writer.write(snapshot)
-        self._excel_exporter.write(snapshot)
+        try:
+            self._gap_tracker.flush(datetime.now(), debug_logger)
+            snapshot = self._metrics.snapshot()
+            self._dashboard_writer.write(snapshot)
+            self._excel_exporter.write(snapshot)
+        finally:
+            self._video_recorder.close()

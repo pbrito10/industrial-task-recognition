@@ -39,12 +39,18 @@ class DebugLogger:
         filename = f"debug_{session_start.strftime('%Y-%m-%d_%Hh%M')}.csv"
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        self._file          = (output_dir / filename).open("w", newline="", encoding="utf-8")
+        self._path          = output_dir / filename
+        self._file          = self._path.open("w", newline="", encoding="utf-8")
         self._writer        = csv.DictWriter(self._file, fieldnames=_COLUMNS)
         self._session_start = session_start
 
         self._writer.writeheader()
         self._file.flush()
+
+    @property
+    def path(self) -> Path:
+        """Caminho real do CSV desta sessão."""
+        return self._path
 
     def log_zone_enter(
         self,

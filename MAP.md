@@ -16,7 +16,9 @@ python main.py
 |-------|---------------|
 | 1 — Testar câmara | Abre a câmara e mostra o esqueleto das mãos. Usa para verificar se está tudo a funcionar antes de trabalhar. |
 | 2 — Definir ROIs | Desenha as zonas de trabalho com o rato sobre o feed da câmara. **Faz isto primeiro** — sem ROIs o programa não corre. |
-| 3 — Correr programa | Pipeline completo: deteta mãos, regista tarefas, abre o dashboard Streamlit e exporta Excel no fim. |
+| 3 — Correr programa | Pipeline completo: deteta mãos, regista tarefas, abre o dashboard Streamlit, grava vídeo anotado e exporta Excel no fim. |
+| 4 — Correr ensaio gravado | Sessão com duração automática de 5, 15 ou 30 minutos. |
+| 5 — Analisar sessão | Gera a tabela de anomalias a partir de um `debug_*.csv`; usa o snapshot histórico da sessão quando existir. |
 
 ---
 
@@ -65,11 +67,13 @@ Câmara (BGR)
                            ├─ TaskStateMachine     → TaskEvent quando tarefa termina
                            ├─ CycleTracker         → CycleResult quando ciclo fecha
                            ├─ MetricsCalculator    → MetricsSnapshot atualizado
-                           ├─ DebugLogger          → output/debug_*.csv  (tempo real)
+                           ├─ DebugLogger          → output/sessions/<sessão>/debug_*.csv  (tempo real)
+                           ├─ SessionConfigSnapshot → output/sessions/<sessão>/debug_*_config.json
+                           ├─ VideoRecorder        → output/sessions/<sessão>/video/*_annotated.mp4
                            ├─ DashboardWriter      → dashboard/data/metrics.json
                            │                               ↓
                            │                         Streamlit (dashboard/app.py)
-                           └─ ExcelExporter        → output/sessao_*.xlsx  (no fim)
+                           └─ ExcelExporter        → output/sessions/<sessão>/sessao_*.xlsx  (no fim)
 ```
 
 ---
@@ -88,8 +92,13 @@ Tudo o que se pode ajustar sem tocar no código está em **`config/settings.yaml
 | `tracking.cycle_zone_order` | Ordem esperada das zonas num ciclo completo |
 | `tracking.exit_zone` | Zona cujo fecho encerra o ciclo (ex: `"Saida"`) |
 | `dashboard.refresh_seconds` | Intervalo de atualização do dashboard |
+| `output.sessions_subdir` | Subpasta dentro de `output/` onde ficam as sessões |
+| `output.record_video` | Ativa/desativa a gravação do vídeo anotado |
+| `output.video_fps` | FPS nominal usado no ficheiro MP4 |
 
 As ROIs (coordenadas dos retângulos) ficam em **`config/rois.json`** — gerado pela opção 2 do menu.
+Cada execução cria uma pasta em **`output/sessions/<data_hora>/`** com CSV, Excel, snapshot histórico,
+frames de gaps em **`frames/gaps/`** e vídeo anotado em **`video/`**.
 
 ---
 
@@ -172,6 +181,9 @@ Cada ficheiro tem uma função `run()` que corre num processo separado via multi
 | `metrics_snapshot.py` | Dataclass imutável com o estado completo das métricas num instante |
 | `dashboard_writer.py` | Serializa o snapshot para JSON com escrita atómica (evita race condition com o Streamlit) |
 | `excel_exporter.py` | Exporta Excel com 4 folhas: Resumo, Métricas por Zona, Ciclos, Eventos |
+| `session_config_snapshot.py` | Guarda/lê a config e ROIs históricas associadas ao CSV de debug |
+| `session_output.py` | Cria a pasta de sessão e localiza CSVs novos/antigos |
+| `video_recorder.py` | Grava o frame anotado em MP4 |
 
 > Adicionar uma nova forma de exportação (ex: base de dados): implementa `OutputInterface` e regista em `monitor_process.py`.
 

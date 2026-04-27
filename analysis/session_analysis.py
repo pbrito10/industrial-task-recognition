@@ -11,7 +11,9 @@ Células:
 
 Colunas extras:
   Ordem correta — Sim/Não (sequência dos TASK_COMPLETE vs expected_order)
-  Estado        — Correto (todas preenchidas + ordem certa) ou Anomalia
+  Resultado do sistema — Em ordem, Sequência incompleta ou Fora de ordem
+  Problema detetado — explicação automática da comparação de sequência
+  Classificação manual / Observações — colunas vazias para validação humana
   Duração total — soma das durações dos TASK_COMPLETE do ciclo
 
 Uso:
@@ -27,8 +29,9 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from src.output.session_config_snapshot import expected_order_from_snapshot, snapshot_path_for_csv
 from src.shared.event_type import EventType
-from src.tracking.order_matching import matches_order
+from src.tracking.order_matching import RESULT_IN_ORDER, diagnose_order, matches_order
 
 _SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
 
@@ -41,6 +44,13 @@ _CELL_ABSENT     = "—"
 def _load_expected_order() -> list[str]:
     with open(_SETTINGS_PATH, encoding="utf-8") as f:
         return yaml.safe_load(f)["tracking"]["cycle_zone_order"]
+
+
+def _load_expected_order_for_csv(csv_path: Path) -> list[str]:
+    snapshot_order = expected_order_from_snapshot(csv_path)
+    if snapshot_order is not None:
+        return snapshot_order
+    return _load_expected_order()
 
 
 def _col_names(expected_order: list[str]) -> list[str]:
@@ -141,9 +151,11 @@ def _build_row(
     actual_seq    = list(complete_rows["zone"])
     result["Ordem correta"] = "Sim" if matches_order(actual_seq, expected_order) else "Não"
 
-    # Estado: correto apenas se todas as colunas têm complete E a ordem está certa
-    all_complete    = all(result[col] not in (_CELL_ABSENT, _CELL_TIMEOUT) for col in col_names)
-    result["Estado"] = "Correto" if (all_complete and result["Ordem correta"] == "Sim") else "Anomalia"
+    diagnosis = diagnose_order(actual_seq, expected_order)
+    result["Resultado do sistema"] = diagnosis.result
+    result["Problema detetado"] = diagnosis.problem
+    result["Classificação manual"] = ""
+    result["Observações"] = ""
 
     total_s = complete_rows["duration_s"].astype(float).sum() if not complete_rows.empty else 0.0
     result["Duração total (s)"] = round(total_s, 2)
@@ -153,7 +165,7 @@ def _build_row(
 
 def build_table(csv_path: Path) -> pd.DataFrame:
     """Lê o CSV e devolve o DataFrame com uma linha por ciclo."""
-    expected_order = _load_expected_order()
+    expected_order = _load_expected_order_for_csv(csv_path)
     cols           = _col_names(expected_order)
 
     df = pd.read_csv(csv_path)
@@ -195,10 +207,13 @@ def main() -> None:
     table  = build_table(csv_path)
     output = _save_table(table, csv_path)
 
+    if not snapshot_path_for_csv(csv_path).exists():
+        print("Aviso: snapshot de configuração da sessão não encontrado; usada a config atual.")
+
     total    = len(table)
-    corretos = (table["Estado"] == "Correto").sum()
+    corretos = (table["Resultado do sistema"] == RESULT_IN_ORDER).sum()
     print(f"Tabela guardada: {output}")
-    print(f"Total: {total} ciclos  |  Corretos: {corretos}  |  Anomalias: {total - corretos}")
+    print(f"Total: {total} ciclos  |  Em ordem: {corretos}  |  A rever: {total - corretos}")
 
 
 if __name__ == "__main__":

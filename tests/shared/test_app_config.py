@@ -40,6 +40,9 @@ def _config():
         },
         "output": {
             "excel_output_dir": "output/",
+            "sessions_subdir": "sessions",
+            "record_video": True,
+            "video_fps": 10.0,
         },
     }
 

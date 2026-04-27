@@ -4,7 +4,7 @@ Todas operam in-place sobre o frame BGR e não guardam estado.
 """
 from __future__ import annotations
 
-import hashlib
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -33,21 +33,30 @@ _HAND_COLORS: dict[str, tuple[int, int, int]] = {
     "right": (0, 200, 50),
 }
 
-_ZONE_PALETTE: tuple[tuple[int, int, int], ...] = (
-    (50, 205, 50),
-    (0, 165, 255),
-    (255, 100, 0),
-    (220, 80, 120),
-    (90, 170, 255),
-    (190, 120, 220),
-    (80, 210, 210),
-)
+_DEFAULT_ZONE_COLOR  = (0, 0, 0)
+_START_ZONE_COLOR    = (0, 200, 0)
+_OUTPUT_ZONE_COLOR   = (255, 0, 0)
+_ASSEMBLY_ZONE_COLOR = (0, 165, 255)
 
 
-def zone_color(name: str) -> tuple[int, int, int]:
-    """Devolve uma cor BGR estável para o nome da zona."""
-    digest = hashlib.sha1(name.encode("utf-8")).digest()
-    return _ZONE_PALETTE[digest[0] % len(_ZONE_PALETTE)]
+@dataclass(frozen=True)
+class ZoneColorScheme:
+    start_zone: str | None = None
+    output_zone: str | None = None
+    assembly_zones: tuple[str, ...] = ()
+
+
+def zone_color(name: str, scheme: ZoneColorScheme | None = None) -> tuple[int, int, int]:
+    """Devolve a cor da ROI pelo papel funcional da zona."""
+    if scheme is None:
+        return _DEFAULT_ZONE_COLOR
+    if name == scheme.start_zone:
+        return _START_ZONE_COLOR
+    if name == scheme.output_zone:
+        return _OUTPUT_ZONE_COLOR
+    if name in scheme.assembly_zones:
+        return _ASSEMBLY_ZONE_COLOR
+    return _DEFAULT_ZONE_COLOR
 
 
 def _draw_skeleton(frame: np.ndarray, keypoints, color: tuple[int, int, int]) -> None:
@@ -115,10 +124,11 @@ def draw_rois(
     rois: RoiCollection,
     *,
     selected_name: str | None = None,
+    color_scheme: ZoneColorScheme | None = None,
 ) -> None:
     """Desenha todas as ROIs da coleção, destacando a zona com nome selected_name (se fornecido)."""
     for roi in rois.all():
-        color = zone_color(roi.name)
+        color = zone_color(roi.name, color_scheme)
         draw_roi(frame, roi, color, selected=roi.name == selected_name)
 
 

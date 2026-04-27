@@ -55,20 +55,38 @@ def run_pipeline(detection_queue, stop_event, config, roi_path):
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
-def _start_processes(processos: dict) -> None:
+def _format_duration(seconds: int | float) -> str:
+    minutes   = int(seconds // 60)
+    remaining = int(seconds % 60)
+    if minutes and remaining:
+        return f"{minutes} min {remaining} s"
+    if minutes:
+        return f"{minutes} min"
+    return f"{remaining} s"
+
+
+def _start_processes(processos: dict, duration_seconds: int | None = None) -> None:
     """Inicia todos os processos do dicionário com delay de 0.5 s entre cada um."""
     print("A arrancar processos...")
     for nome, processo in processos.items():
         processo.start()
         time.sleep(0.5)
         print(f"  [{nome}] iniciado (PID {processo.pid})")
-    print("A correr. Carrega 'q' na janela para parar.\n")
+    if duration_seconds is None:
+        print("A correr. Carrega 'q' na janela para parar.\n")
+    else:
+        print(f"A correr durante {_format_duration(duration_seconds)}. Carrega 'q' para parar antes.\n")
 
 
-def _wait_for_stop(stop_event) -> None:
+def _wait_for_stop(stop_event, duration_seconds: int | None = None) -> None:
     """Bloqueia até stop_event ser ativado ou Ctrl+C ser pressionado."""
+    started_at = time.monotonic()
     try:
         while not stop_event.is_set():
+            if duration_seconds is not None and time.monotonic() - started_at >= duration_seconds:
+                print("\nDuração definida atingida — a fechar sessão...")
+                stop_event.set()
+                break
             time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nCtrl+C — a parar...")
@@ -77,17 +95,18 @@ def _wait_for_stop(stop_event) -> None:
 
 def _terminate_processes(processos: dict) -> None:
     """Aguarda terminação (join 3 s) e força terminate nos processos que ainda estejam vivos."""
-    for processo in processos.values():
-        processo.join(timeout=3)
+    for nome, processo in processos.items():
+        timeout = 20 if nome == "pipeline" else 3
+        processo.join(timeout=timeout)
         if processo.is_alive():
             processo.terminate()
     print("Processos terminados.")
 
 
-def _launch(stop_event, **processos):
+def _launch(stop_event, duration_seconds: int | None = None, **processos):
     """Arranca os processos, aguarda o sinal de paragem e termina-os."""
-    _start_processes(processos)
-    _wait_for_stop(stop_event)
+    _start_processes(processos, duration_seconds)
+    _wait_for_stop(stop_event, duration_seconds)
     _terminate_processes(processos)
 
 
@@ -118,14 +137,22 @@ def definir_rois(config):
     """
     from src.roi.json_roi_repository import JsonRoiRepository
     from src.roi.roi_drawer import RoiDrawer
+    from src.video.frame_annotator import ZoneColorScheme
     from src.video.camera import Camera
 
     camera_factory = lambda: Camera.from_config(config["camera"])
+    cycle_order = config["tracking"]["cycle_zone_order"]
+    color_scheme = ZoneColorScheme(
+        start_zone=cycle_order[0] if cycle_order else None,
+        output_zone=config["tracking"]["exit_zone"],
+        assembly_zones=tuple(config["tracking"]["two_hands_zones"]),
+    )
 
     repository = JsonRoiRepository(path=_ROI_PATH)
     drawer     = RoiDrawer(
         camera_factory=camera_factory,
         zone_names=config["tracking"]["zones"],
+        color_scheme=color_scheme,
     )
 
     result = drawer.draw(repository.load())
@@ -159,7 +186,7 @@ def _validate_config_vs_rois(config: dict, roi_names: set[str]) -> list[str]:
     return errors
 
 
-def correr_programa(config):
+def correr_programa(config, duration_seconds: int | None = None):
     """Pipeline completo com tracking, métricas, dashboard e exportação Excel.
 
     O Streamlit é lançado como subprocess independente — não usa queues nem
@@ -197,6 +224,7 @@ def correr_programa(config):
     try:
         _launch(
             stop_event,
+            duration_seconds=duration_seconds,
             camera   = Process(target=run_camera,   name="camera",
                                args=(frame_queue, stop_event, config)),
             detector = Process(target=run_detector, name="detector",
@@ -208,12 +236,38 @@ def correr_programa(config):
         dashboard_proc.terminate()
 
 
+_ENSAIOS_GRAVADOS = {
+    "1": ("5 minutos", 5 * 60),
+    "2": ("15 minutos", 15 * 60),
+    "3": ("30 minutos", 30 * 60),
+}
+
+
+def correr_ensaio_gravado(config):
+    """Corre uma sessão gravada com duração pré-definida."""
+    print("\nDuração do ensaio:")
+    for key, (label, _) in _ENSAIOS_GRAVADOS.items():
+        print(f"  {key}. {label}")
+
+    escolha = input("Escolha: ").strip()
+    if escolha not in _ENSAIOS_GRAVADOS:
+        print("Opção inválida.")
+        return
+
+    label, duration_seconds = _ENSAIOS_GRAVADOS[escolha]
+    print(f"A preparar ensaio de {label}.")
+    correr_programa(config, duration_seconds=duration_seconds)
+
+
 def analisar_sessao(config):
     """Lista os CSVs de debug disponíveis e gera a tabela de anomalias para o escolhido."""
     from analysis.session_analysis import build_table, _save_table
+    from src.output.session_output import debug_csv_paths, relative_to_output_root
+    from src.output.session_config_snapshot import snapshot_path_for_csv
+    from src.tracking.order_matching import RESULT_IN_ORDER
 
     output_dir = Path(config["output"]["excel_output_dir"])
-    csvs       = sorted(output_dir.glob("debug_*.csv"), reverse=True)
+    csvs       = debug_csv_paths(config)
 
     if not csvs:
         print(f"Nenhum ficheiro de sessão encontrado em '{output_dir}'.")
@@ -221,7 +275,7 @@ def analisar_sessao(config):
 
     print("\nFicheiros disponíveis:")
     for i, csv_path in enumerate(csvs, start=1):
-        print(f"  {i}. {csv_path.name}")
+        print(f"  {i}. {relative_to_output_root(csv_path, config)}")
 
     escolha = input("Escolha (número): ").strip()
     if not escolha.isdigit() or not (1 <= int(escolha) <= len(csvs)):
@@ -229,22 +283,26 @@ def analisar_sessao(config):
         return
 
     csv_path = csvs[int(escolha) - 1]
-    print(f"A analisar {csv_path.name}...")
+    print(f"A analisar {relative_to_output_root(csv_path, config)}...")
 
     table  = build_table(csv_path)
     output = _save_table(table, csv_path)
 
+    if not snapshot_path_for_csv(csv_path).exists():
+        print("Aviso: snapshot de configuração da sessão não encontrado; usada a config atual.")
+
     total    = len(table)
-    corretos = (table["Estado"] == "Correto").sum()
+    corretos = (table["Resultado do sistema"] == RESULT_IN_ORDER).sum()
     print(f"Tabela guardada: {output.name}")
-    print(f"Total: {total} ciclos  |  Corretos: {corretos}  |  Anomalias: {total - corretos}")
+    print(f"Total: {total} ciclos  |  Em ordem: {corretos}  |  A rever: {total - corretos}")
 
 
 _OPCOES = {
-    "1": ("Testar câmara",      testar_camera),
-    "2": ("Definir ROIs",       definir_rois),
-    "3": ("Correr programa",    correr_programa),
-    "4": ("Analisar sessão",    analisar_sessao),
+    "1": ("Testar câmara",          testar_camera),
+    "2": ("Definir ROIs",           definir_rois),
+    "3": ("Correr programa",        correr_programa),
+    "4": ("Correr ensaio gravado",  correr_ensaio_gravado),
+    "5": ("Analisar sessão",        analisar_sessao),
 }
 
 

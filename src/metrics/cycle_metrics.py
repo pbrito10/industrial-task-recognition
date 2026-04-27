@@ -19,11 +19,11 @@ class CycleMetrics(_DurationMetrics):
         self._correct_durations:  list[timedelta] = []
 
     def add(self, duration: timedelta, sequence_in_order: bool, is_anomaly: bool = False) -> None:
-        """Regista a duração de um ciclo completo, a classificação e se é anomalia.
+        """Regista a duração de um ciclo completo e o resultado automático.
 
-        sequence_in_order=True  → em ordem (ciclo correto)
-        sequence_in_order=False → sequência incompleta ou fora de ordem
-        is_anomaly=True         → sequência incompleta + duração fora do intervalo histórico
+        sequence_in_order=True  → sequência registada em ordem
+        sequence_in_order=False → sequência incompleta ou fora de ordem, a rever manualmente
+        is_anomaly=True         → reservado para compatibilidade com dados antigos
         """
         self._add_duration(duration)
         if sequence_in_order is True:
@@ -43,10 +43,14 @@ class CycleMetrics(_DurationMetrics):
         """Ciclos com sequência completa e em ordem."""
         return self._in_order_count
 
+    def count_to_review(self) -> int:
+        """Ciclos que não ficaram em ordem e precisam de validação manual."""
+        return self.count() - self._in_order_count
+
     def count_probably_complete(self) -> int:
-        """Ciclos com sequência incompleta mas duração dentro do intervalo histórico."""
+        """Ciclos fora da ordem esperada, a rever manualmente."""
         return self.count() - self._in_order_count - self._anomaly_count
 
     def count_anomalies(self) -> int:
-        """Ciclos com sequência incompleta e duração fora do intervalo histórico."""
+        """Contador preservado por compatibilidade com dados antigos."""
         return self._anomaly_count

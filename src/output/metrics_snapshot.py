@@ -64,6 +64,7 @@ class CycleMetricSnapshot:
     _std_deviation: timedelta = timedelta(0)
     _correct_average: timedelta | None = None
     _count_in_order: int = 0
+    _count_to_review: int = 0
     _count_probably_complete: int = 0
     _count_anomalies: int = 0
 
@@ -79,6 +80,7 @@ class CycleMetricSnapshot:
             _std_deviation=metrics.std_deviation(),
             _correct_average=metrics.correct_average(),
             _count_in_order=metrics.count_in_order(),
+            _count_to_review=metrics.count_to_review(),
             _count_probably_complete=metrics.count_probably_complete(),
             _count_anomalies=metrics.count_anomalies(),
         )
@@ -109,6 +111,9 @@ class CycleMetricSnapshot:
 
     def count_in_order(self) -> int:
         return self._count_in_order
+
+    def count_to_review(self) -> int:
+        return self._count_to_review
 
     def count_probably_complete(self) -> int:
         return self._count_probably_complete

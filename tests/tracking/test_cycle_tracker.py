@@ -1,7 +1,13 @@
 from datetime import datetime, timedelta
 import pytest
 from src.tracking.cycle_tracker import CycleTracker
-from src.tracking.order_matching import matches_order
+from src.tracking.order_matching import (
+    RESULT_IN_ORDER,
+    RESULT_INCOMPLETE,
+    RESULT_OUT_OF_ORDER,
+    diagnose_order,
+    matches_order,
+)
 from src.tracking.task_event import TaskEvent
 
 _T0 = datetime(2024, 1, 1, 12, 0, 0)
@@ -40,6 +46,40 @@ class TestMatchesOrder:
         assert matches_order(["qualquer"], [])
 
 
+class TestDiagnoseOrder:
+
+    def test_correct_order(self):
+        diagnosis = diagnose_order(["Porca", "Montagem", "Chassi", "Saida"], _ORDER)
+
+        assert diagnosis.result == RESULT_IN_ORDER
+        assert diagnosis.problem == "Sem problema detetado."
+
+    def test_skipped_zone_is_incomplete(self):
+        diagnosis = diagnose_order(["Porca", "Chassi", "Saida"], _ORDER)
+
+        assert diagnosis.result == RESULT_INCOMPLETE
+        assert '"Montagem"' in diagnosis.problem
+
+    def test_missing_tail_is_incomplete(self):
+        diagnosis = diagnose_order(["Porca", "Montagem"], _ORDER)
+
+        assert diagnosis.result == RESULT_INCOMPLETE
+        assert '"Chassi"' in diagnosis.problem
+        assert '"Saida"' in diagnosis.problem
+
+    def test_returning_to_previous_zone_is_out_of_order(self):
+        diagnosis = diagnose_order(["Porca", "Montagem", "Porca", "Saida"], _ORDER)
+
+        assert diagnosis.result == RESULT_OUT_OF_ORDER
+        assert 'Esperava "Chassi", mas apareceu "Porca".' == diagnosis.problem
+
+    def test_unknown_zone_is_out_of_order(self):
+        diagnosis = diagnose_order(["Porca", "Intruso", "Saida"], _ORDER)
+
+        assert diagnosis.result == RESULT_OUT_OF_ORDER
+        assert 'Esperava "Montagem", mas apareceu "Intruso".' == diagnosis.problem
+
+
 # --- CycleTracker ---
 
 class TestCycleTracker:
@@ -74,6 +114,7 @@ class TestCycleTracker:
         for i, zone in enumerate(["Porca", "Montagem", "Chassi", "Saida"]):
             result = tracker.record(_event(zone, i * 2))
         assert result.sequence_in_order is True
+        assert result.expected_sequence == tuple(_ORDER)
 
     def test_incorrect_order_flagged(self, tracker):
         for i, zone in enumerate(["Montagem", "Porca", "Chassi", "Saida"]):

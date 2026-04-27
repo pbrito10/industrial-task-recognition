@@ -20,14 +20,23 @@ def _event(zone="Porca", duration_s=5.0, forced=False, cycle=1) -> TaskEvent:
     return TaskEvent.create(zone, start, end, cycle_number=cycle, was_forced=forced)
 
 
-def _cycle(duration_s=60.0, in_order=True, number=1) -> CycleResult:
+def _cycle(
+    duration_s=60.0,
+    in_order=True,
+    number=1,
+    actual_sequence=None,
+    expected_sequence=None,
+) -> CycleResult:
+    actual_sequence = actual_sequence or ["Porca", "Saida"]
+    expected_sequence = expected_sequence or ["Porca", "Saida"]
     return CycleResult(
         start_time=_T0,
         end_time=_T0 + timedelta(seconds=duration_s),
         duration=timedelta(seconds=duration_s),
         cycle_number=number,
         sequence_in_order=in_order,
-        actual_sequence=["Porca", "Saida"],
+        actual_sequence=actual_sequence,
+        expected_sequence=expected_sequence,
     )
 
 
@@ -149,7 +158,7 @@ def test_cycles_written_after_add_cycle(exporter, tmp_path):
     assert ws.max_row >= 2  # header + 1 ciclo
 
 
-def test_cycles_sequence_in_order_label(exporter, tmp_path):
+def test_cycles_sequence_in_order_result(exporter, tmp_path):
     exporter.add_event(_event(cycle=1))
     exporter.add_cycle_result(_cycle(in_order=True, number=1))
     exporter.write(_snapshot())
@@ -159,14 +168,70 @@ def test_cycles_sequence_in_order_label(exporter, tmp_path):
     assert "Em ordem" in values
 
 
-def test_cycles_out_of_order_label(exporter, tmp_path):
+def test_cycles_incomplete_result(exporter, tmp_path):
     exporter.add_event(_event(cycle=1))
-    exporter.add_cycle_result(_cycle(in_order=False, number=1))
+    exporter.add_cycle_result(_cycle(
+        in_order=False,
+        number=1,
+        actual_sequence=["Porca", "Saida"],
+        expected_sequence=["Porca", "Montagem", "Saida"],
+    ))
     exporter.write(_snapshot())
     wb     = _open_workbook(tmp_path)
     ws     = wb["Ciclos"]
     values = [ws.cell(row=r, column=5).value for r in range(2, ws.max_row + 1)]
-    assert "Provavelmente completo" in values
+    assert "Sequência incompleta" in values
+
+
+def test_cycles_out_of_order_result(exporter, tmp_path):
+    exporter.add_cycle_result(_cycle(
+        in_order=False,
+        number=1,
+        actual_sequence=["Porca", "Montagem", "Porca", "Saida"],
+        expected_sequence=["Porca", "Montagem", "Chassi", "Saida"],
+    ))
+    exporter.write(_snapshot())
+    wb = _open_workbook(tmp_path)
+    ws = wb["Ciclos"]
+
+    assert ws.cell(row=2, column=5).value == "Fora de ordem"
+
+
+def test_cycles_include_recorded_sequence(exporter, tmp_path):
+    exporter.add_cycle_result(_cycle(number=1))
+    exporter.write(_snapshot())
+    wb = _open_workbook(tmp_path)
+    ws = wb["Ciclos"]
+
+    assert ws.cell(row=1, column=6).value == "Sequência registada"
+    assert ws.cell(row=2, column=6).value == "Porca → Saida"
+
+
+def test_cycles_include_detected_problem_for_incomplete_sequence(exporter, tmp_path):
+    exporter.add_cycle_result(_cycle(
+        in_order=False,
+        number=1,
+        actual_sequence=["Porca", "Saida"],
+        expected_sequence=["Porca", "Montagem", "Saida"],
+    ))
+    exporter.write(_snapshot())
+    wb = _open_workbook(tmp_path)
+    ws = wb["Ciclos"]
+
+    assert ws.cell(row=1, column=7).value == "Problema detetado"
+    assert 'Faltaram zonas esperadas: "Montagem".' == ws.cell(row=2, column=7).value
+
+
+def test_cycles_include_manual_validation_columns(exporter, tmp_path):
+    exporter.add_cycle_result(_cycle(number=1))
+    exporter.write(_snapshot())
+    wb = _open_workbook(tmp_path)
+    ws = wb["Ciclos"]
+
+    assert ws.cell(row=1, column=8).value == "Classificação manual"
+    assert ws.cell(row=1, column=9).value == "Observações"
+    assert ws.cell(row=2, column=8).value is None
+    assert ws.cell(row=2, column=9).value is None
 
 
 def test_open_cycle_event_is_not_written_as_closed_cycle(exporter, tmp_path):
