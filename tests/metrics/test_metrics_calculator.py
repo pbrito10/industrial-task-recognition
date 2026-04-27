@@ -15,6 +15,8 @@ def _event(zone: str, duration_s: float, forced: bool = False) -> TaskEvent:
 
 def _cycle(duration_s: float, in_order: bool = True) -> CycleResult:
     return CycleResult(
+        start_time=_T0,
+        end_time=_T0 + timedelta(seconds=duration_s),
         duration=timedelta(seconds=duration_s),
         cycle_number=1,
         sequence_in_order=in_order,
@@ -103,3 +105,19 @@ def test_cycle_metrics_recorded(calc):
     snap = calc.snapshot()
     assert snap.cycle_metrics.count() == 2
     assert snap.cycle_metrics.count_in_order() == 1
+
+
+def test_snapshot_task_metrics_are_frozen_by_value(calc):
+    calc.record(_event("Porca", 3.0))
+    snap = calc.snapshot()
+
+    calc.record(_event("Porca", 7.0))
+
+    assert snap.task_metrics["Porca"].count() == 1
+
+
+def test_snapshot_task_metrics_mapping_is_read_only(calc):
+    snap = calc.snapshot()
+
+    with pytest.raises(TypeError):
+        snap.task_metrics["Nova"] = snap.task_metrics["Porca"]

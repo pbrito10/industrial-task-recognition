@@ -21,3 +21,4 @@ sounddevice==0.5.5
 pandas
 openpyxl
 streamlit
+pytest

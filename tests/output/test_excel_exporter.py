@@ -22,6 +22,8 @@ def _event(zone="Porca", duration_s=5.0, forced=False, cycle=1) -> TaskEvent:
 
 def _cycle(duration_s=60.0, in_order=True, number=1) -> CycleResult:
     return CycleResult(
+        start_time=_T0,
+        end_time=_T0 + timedelta(seconds=duration_s),
         duration=timedelta(seconds=duration_s),
         cycle_number=number,
         sequence_in_order=in_order,
@@ -165,6 +167,14 @@ def test_cycles_out_of_order_label(exporter, tmp_path):
     ws     = wb["Ciclos"]
     values = [ws.cell(row=r, column=5).value for r in range(2, ws.max_row + 1)]
     assert "Provavelmente completo" in values
+
+
+def test_open_cycle_event_is_not_written_as_closed_cycle(exporter, tmp_path):
+    exporter.add_event(_event(cycle=1))
+    exporter.write(_snapshot())
+    wb = _open_workbook(tmp_path)
+    ws = wb["Ciclos"]
+    assert ws.max_row == 1
 
 
 # --- Folha Eventos ---

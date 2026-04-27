@@ -4,6 +4,8 @@ Todas operam in-place sobre o frame BGR e não guardam estado.
 """
 from __future__ import annotations
 
+import hashlib
+
 import cv2
 import numpy as np
 
@@ -31,19 +33,21 @@ _HAND_COLORS: dict[str, tuple[int, int, int]] = {
     "right": (0, 200, 50),
 }
 
-_ZONE_COLOR_DEFAULT  = (50, 205, 50)
-_ZONE_COLOR_ASSEMBLY = (0, 165, 255)
-_ZONE_COLOR_EXIT     = (255, 100, 0)
-
-_ZONE_COLOR_MAP: dict[str, tuple[int, int, int]] = {
-    "Montagem": _ZONE_COLOR_ASSEMBLY,
-    "Saida":    _ZONE_COLOR_EXIT,
-}
+_ZONE_PALETTE: tuple[tuple[int, int, int], ...] = (
+    (50, 205, 50),
+    (0, 165, 255),
+    (255, 100, 0),
+    (220, 80, 120),
+    (90, 170, 255),
+    (190, 120, 220),
+    (80, 210, 210),
+)
 
 
 def zone_color(name: str) -> tuple[int, int, int]:
-    """Devolve a cor BGR da zona pelo nome. Usa _ZONE_COLOR_MAP; fallback para verde."""
-    return _ZONE_COLOR_MAP.get(name, _ZONE_COLOR_DEFAULT)
+    """Devolve uma cor BGR estável para o nome da zona."""
+    digest = hashlib.sha1(name.encode("utf-8")).digest()
+    return _ZONE_PALETTE[digest[0] % len(_ZONE_PALETTE)]
 
 
 def _draw_skeleton(frame: np.ndarray, keypoints, color: tuple[int, int, int]) -> None:

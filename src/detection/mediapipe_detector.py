@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import time
 
-import mediapipe as mp
 import numpy as np
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision as mp_vision
 
 from src.detection.bounding_box import BoundingBox
 from src.detection.detector_interface import DetectorInterface
@@ -44,7 +41,54 @@ class MediapipeDetector(DetectorInterface):
         max_num_hands: int = 2,
         min_detection_confidence: float = 0.7,
         min_tracking_confidence: float = 0.7,
+        landmarker=None,
+        mp_module=None,
     ) -> None:
+        if landmarker is None:
+            self._mp, self._landmarker = self._create_landmarker(
+                model_path,
+                max_num_hands,
+                min_detection_confidence,
+                min_tracking_confidence,
+            )
+        else:
+            if mp_module is None:
+                raise ValueError("mp_module é obrigatório quando landmarker é injetado.")
+            self._mp = mp_module
+            self._landmarker = landmarker
+
+    def detect(self, frame: np.ndarray) -> list[HandDetection]:
+        """Processa um frame RGB e devolve as mãos detetadas.
+
+        Recebe: frame em RGB (convertido em capture_process antes de entrar na queue).
+        Devolve: lista de HandDetection, uma por mão; lista vazia se nenhuma for detetada.
+        """
+        height, width = frame.shape[:2]
+
+        mp_image     = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=frame)
+        timestamp_ms = int(time.monotonic() * 1000)
+        result       = self._landmarker.detect_for_video(mp_image, timestamp_ms)
+
+        if not result.hand_landmarks:
+            return []
+
+        return [
+            self._build_detection(landmarks, handedness, width, height)
+            for landmarks, handedness in zip(result.hand_landmarks, result.handedness)
+        ]
+
+    def _create_landmarker(
+        self,
+        model_path: str,
+        max_num_hands: int,
+        min_detection_confidence: float,
+        min_tracking_confidence: float,
+    ):
+        """Carrega MediaPipe apenas quando o detector real é instanciado."""
+        import mediapipe as mp
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+
         base_options = mp_python.BaseOptions(model_asset_path=model_path)
         options = mp_vision.HandLandmarkerOptions(
             base_options=base_options,
@@ -56,27 +100,7 @@ class MediapipeDetector(DetectorInterface):
             min_hand_presence_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence,
         )
-        self._landmarker = mp_vision.HandLandmarker.create_from_options(options)
-
-    def detect(self, frame: np.ndarray) -> list[HandDetection]:
-        """Processa um frame RGB e devolve as mãos detetadas.
-
-        Recebe: frame em RGB (convertido em capture_process antes de entrar na queue).
-        Devolve: lista de HandDetection, uma por mão; lista vazia se nenhuma for detetada.
-        """
-        height, width = frame.shape[:2]
-
-        mp_image     = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-        timestamp_ms = int(time.monotonic() * 1000)
-        result       = self._landmarker.detect_for_video(mp_image, timestamp_ms)
-
-        if not result.hand_landmarks:
-            return []
-
-        return [
-            self._build_detection(landmarks, handedness, width, height)
-            for landmarks, handedness in zip(result.hand_landmarks, result.handedness)
-        ]
+        return mp, mp_vision.HandLandmarker.create_from_options(options)
 
     def _build_detection(
         self,

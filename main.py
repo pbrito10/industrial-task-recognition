@@ -20,6 +20,8 @@ from pathlib import Path
 
 import yaml
 
+from src.shared.app_config import validate_config
+
 # Sem DISPLAY definido (e.g. tty sem sessão gráfica), usa o display físico da máquina.
 # Se DISPLAY já estiver definido (X11 forwarding ativo), não sobrescreve.
 if not os.environ.get("DISPLAY"):
@@ -247,8 +249,8 @@ _OPCOES = {
 
 
 def main():
-    with open(_CONFIG_PATH) as f:
-        config = yaml.safe_load(f)
+    with open(_CONFIG_PATH, encoding="utf-8") as f:
+        config = validate_config(yaml.safe_load(f))
 
     while True:
         print("\n=== Sistema de Reconhecimento Industrial ===")

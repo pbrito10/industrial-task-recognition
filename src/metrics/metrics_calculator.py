@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from src.metrics.cycle_metrics import CycleMetrics
 from src.metrics.task_metrics import TaskMetrics
-from src.output.metrics_snapshot import MetricsSnapshot
+from src.output.metrics_snapshot import CycleMetricSnapshot, MetricsSnapshot, TaskMetricSnapshot
 from src.tracking.cycle_result import CycleResult
 from src.tracking.task_event import TaskEvent
 
@@ -60,8 +60,11 @@ class MetricsCalculator:
         percentages      = self._percentages(session_duration)
 
         return MetricsSnapshot(
-            task_metrics=dict(self._task_metrics),
-            cycle_metrics=self._cycle_metrics,
+            task_metrics={
+                name: TaskMetricSnapshot.from_metrics(metrics)
+                for name, metrics in self._task_metrics.items()
+            },
+            cycle_metrics=CycleMetricSnapshot.from_metrics(self._cycle_metrics),
             productive_time=self._productive_time,
             transition_time=transition_time,
             interruption_time=self._interruption_time,

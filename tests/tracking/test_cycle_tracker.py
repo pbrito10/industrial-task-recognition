@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import pytest
-from src.tracking.cycle_tracker import CycleTracker, _matches_order
+from src.tracking.cycle_tracker import CycleTracker
+from src.tracking.order_matching import matches_order
 from src.tracking.task_event import TaskEvent
 
 _T0 = datetime(2024, 1, 1, 12, 0, 0)
@@ -13,30 +14,30 @@ def _event(zone: str, offset_s: float, duration_s: float = 2.0, forced: bool = F
     return TaskEvent.create(zone, start, start + timedelta(seconds=duration_s), 1, forced)
 
 
-# --- _matches_order ---
+# --- matches_order ---
 
 class TestMatchesOrder:
 
     def test_correct_order(self):
-        assert _matches_order(["Porca", "Montagem", "Chassi", "Saida"], _ORDER)
+        assert matches_order(["Porca", "Montagem", "Chassi", "Saida"], _ORDER)
 
     def test_repeated_zone_allowed(self):
-        assert _matches_order(["Porca", "Porca", "Montagem", "Chassi", "Saida"], _ORDER)
+        assert matches_order(["Porca", "Porca", "Montagem", "Chassi", "Saida"], _ORDER)
 
     def test_skipped_zone_fails(self):
-        assert not _matches_order(["Porca", "Chassi", "Saida"], _ORDER)
+        assert not matches_order(["Porca", "Chassi", "Saida"], _ORDER)
 
     def test_out_of_order_fails(self):
-        assert not _matches_order(["Montagem", "Porca", "Chassi", "Saida"], _ORDER)
+        assert not matches_order(["Montagem", "Porca", "Chassi", "Saida"], _ORDER)
 
     def test_incomplete_sequence_fails(self):
-        assert not _matches_order(["Porca", "Montagem"], _ORDER)
+        assert not matches_order(["Porca", "Montagem"], _ORDER)
 
     def test_empty_actual_fails(self):
-        assert not _matches_order([], _ORDER)
+        assert not matches_order([], _ORDER)
 
     def test_empty_expected_passes(self):
-        assert _matches_order(["qualquer"], [])
+        assert matches_order(["qualquer"], [])
 
 
 # --- CycleTracker ---

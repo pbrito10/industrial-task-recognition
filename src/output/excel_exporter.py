@@ -14,6 +14,7 @@ from src.tracking.task_event import TaskEvent
 # Cor de destaque para a zona gargalo (amarelo-âmbar)
 _BOTTLENECK_FILL = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
 _HEADER_FONT     = Font(bold=True)
+_CYCLE_COLUMNS   = ["Nº Ciclo", "Início", "Fim", "Duração (s)", "Estado"]
 
 # Mapeamento direto para evitar ternário aninhado em _write_events
 _FORCED_LABEL: dict[bool, str] = {True: "Sim", False: "Não"}
@@ -40,8 +41,7 @@ class ExcelExporter(OutputInterface):
         self._output_dir    = output_dir
         self._session_start = session_start
         self._events:         list[TaskEvent]  = []
-        self._cycle_order: dict[int, bool] = {}  # cycle_number → sequence_in_order
-        self._cycle_anomaly:  dict[int, bool]  = {}  # cycle_number → is_anomaly
+        self._cycle_results:  dict[int, CycleResult] = {}
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -50,9 +50,8 @@ class ExcelExporter(OutputInterface):
         self._events.append(event)
 
     def add_cycle_result(self, cycle_result: CycleResult) -> None:
-        """Regista ordem e anomalia do ciclo para exportação."""
-        self._cycle_order[cycle_result.cycle_number]   = cycle_result.sequence_in_order
-        self._cycle_anomaly[cycle_result.cycle_number] = cycle_result.is_anomaly
+        """Regista o ciclo fechado para exportação."""
+        self._cycle_results[cycle_result.cycle_number] = cycle_result
 
     def write(self, snapshot: MetricsSnapshot) -> None:
         """Gera o ficheiro Excel com todas as folhas."""
@@ -113,31 +112,18 @@ class ExcelExporter(OutputInterface):
         self._highlight_bottleneck(writer, "Métricas por Zona", df, snapshot.bottleneck_zone)
 
     def _write_cycles(self, writer: pd.ExcelWriter) -> None:
-        """Folha 'Ciclos': uma linha por ciclo com início, fim, duração e sequência correta.
-
-        O início e fim de cada ciclo são reconstruídos aqui a partir dos TaskEvents
-        acumulados, porque o CycleResult apenas guarda duração, não timestamps absolutos.
-        """
-        cycles: dict[int, list[TaskEvent]] = {}
-        for event in self._events:
-            cycles.setdefault(event.cycle_number, []).append(event)
-
+        """Folha 'Ciclos': uma linha por ciclo fechado."""
         rows = []
-        for cycle_number, events in sorted(cycles.items()):
-            sequence_in_order = self._cycle_order.get(cycle_number, False)
-            is_anomaly        = self._cycle_anomaly.get(cycle_number, False)
-            start    = min(e.start_time for e in events)
-            end      = max(e.end_time   for e in events)
-            duration = round((end - start).total_seconds(), 2)
+        for cycle_result in sorted(self._cycle_results.values(), key=lambda cycle: cycle.cycle_number):
             rows.append({
-                "Nº Ciclo":    cycle_number,
-                "Início":      start.strftime("%H:%M:%S"),
-                "Fim":         end.strftime("%H:%M:%S"),
-                "Duração (s)": duration,
-                "Estado":      _cycle_state_label(sequence_in_order, is_anomaly),
+                "Nº Ciclo":    cycle_result.cycle_number,
+                "Início":      cycle_result.start_time.strftime("%H:%M:%S"),
+                "Fim":         cycle_result.end_time.strftime("%H:%M:%S"),
+                "Duração (s)": round(cycle_result.duration.total_seconds(), 2),
+                "Estado":      _cycle_state_label(cycle_result.sequence_in_order, cycle_result.is_anomaly),
             })
 
-        df = pd.DataFrame(rows)
+        df = pd.DataFrame(rows, columns=_CYCLE_COLUMNS)
         df.to_excel(writer, sheet_name="Ciclos", index=False)
         self._bold_headers(writer, "Ciclos", df)
 

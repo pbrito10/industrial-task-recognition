@@ -21,6 +21,8 @@ def _task_event(zone="Porca", duration_s=5.0, forced=False) -> TaskEvent:
 
 def _cycle_result(duration_s=60.0, in_order=True) -> CycleResult:
     return CycleResult(
+        start_time=_T0,
+        end_time=_T0 + timedelta(seconds=duration_s),
         duration=timedelta(seconds=duration_s),
         cycle_number=1,
         sequence_in_order=in_order,

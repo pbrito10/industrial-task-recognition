@@ -32,29 +32,12 @@ class Camera:
 
         # Mapas pré-calculados para undistortion eficiente por frame (initUndistortRectifyMap)
         # Calculados uma vez no construtor; remap() aplica-os sem recalcular a cada frame
-        self._undistort_maps: tuple[np.ndarray, np.ndarray] | None = None
-        if calibration_path:
-            path = Path(calibration_path)
-            if path.exists():
-                data = np.load(str(path))
-                K, dist = data["K"], data["dist"]
-                # newcameramtx guardado pelo calibrate_lens atual; fallback para K em ficheiros antigos
-                newcameramtx = data["newcameramtx"] if "newcameramtx" in data else K
-                self._undistort_maps = cv2.initUndistortRectifyMap(
-                    K, dist, None, newcameramtx, (width, height), cv2.CV_32FC1
-                )
+        self._undistort_maps = self._load_lens_calibration(calibration_path, width, height)
 
         self._flip = flip
 
         # Matriz de perspetiva para correção de vista (bird's-eye view)
-        self._perspective_M: np.ndarray | None = None
-        self._perspective_size: tuple[int, int] | None = None
-        if perspective_path:
-            path = Path(perspective_path)
-            if path.exists():
-                data = np.load(str(path))
-                self._perspective_M = data["M"]
-                self._perspective_size = tuple(data["output_size"].tolist())
+        self._perspective_M, self._perspective_size = self._load_perspective_calibration(perspective_path)
 
     @classmethod
     def from_config(cls, config: dict) -> "Camera":
@@ -82,6 +65,41 @@ class Camera:
         if self._perspective_M is not None:
             frame = cv2.warpPerspective(frame, self._perspective_M, self._perspective_size)
         return frame
+
+    def _load_lens_calibration(
+        self,
+        calibration_path: str | None,
+        width: int,
+        height: int,
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        if not calibration_path:
+            return None
+
+        path = Path(calibration_path)
+        if not path.exists():
+            return None
+
+        data = np.load(str(path))
+        K, dist = data["K"], data["dist"]
+        # newcameramtx guardado pelo calibrate_lens atual; fallback para K em ficheiros antigos
+        newcameramtx = data["newcameramtx"] if "newcameramtx" in data else K
+        return cv2.initUndistortRectifyMap(
+            K, dist, None, newcameramtx, (width, height), cv2.CV_32FC1
+        )
+
+    def _load_perspective_calibration(
+        self,
+        perspective_path: str | None,
+    ) -> tuple[np.ndarray | None, tuple[int, int] | None]:
+        if not perspective_path:
+            return None, None
+
+        path = Path(perspective_path)
+        if not path.exists():
+            return None, None
+
+        data = np.load(str(path))
+        return data["M"], tuple(data["output_size"].tolist())
 
     def fps(self) -> float:
         """FPS reportado pela câmara — usado para cálculos temporais no pipeline."""

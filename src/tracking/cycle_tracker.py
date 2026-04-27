@@ -3,38 +3,8 @@ from __future__ import annotations
 from datetime import timedelta
 
 from src.tracking.cycle_result import CycleResult
+from src.tracking.order_matching import matches_order
 from src.tracking.task_event import TaskEvent
-
-
-def _matches_order(actual: list[str], expected: list[str]) -> bool:
-    """Verifica se a sequência real respeita a ordem esperada.
-
-    Permite repetições consecutivas da mesma zona (ex: o operador vai três
-    vezes às Rodas antes de avançar) mas não permite saltar zonas nem
-    visitá-las fora de ordem.
-
-    Algoritmo de ponteiro único: ptr aponta para a zona esperada atual.
-    Ao encontrar a zona seguinte, avança o ptr. Qualquer outra zona falha.
-    """
-    if not expected:
-        return True
-    if not actual:
-        return False
-
-    ptr             = 0
-    entered_current = False
-
-    for zone in actual:
-        if zone == expected[ptr]:
-            entered_current = True
-            continue
-        if entered_current and ptr + 1 < len(expected) and zone == expected[ptr + 1]:
-            ptr            += 1
-            entered_current = True
-            continue
-        return False
-
-    return entered_current and ptr == len(expected) - 1
 
 
 class CycleTracker:
@@ -107,7 +77,7 @@ class CycleTracker:
         estabelecem a referência).
         """
         actual_sequence   = [t.zone_name for t in self._tasks_in_cycle if not t.was_forced]
-        sequence_in_order = _matches_order(actual_sequence, self._expected_order)
+        sequence_in_order = matches_order(actual_sequence, self._expected_order)
 
         if sequence_in_order:
             return self._close_cycle(actual_sequence, True, False)
@@ -130,6 +100,8 @@ class CycleTracker:
         """Fecha o ciclo e atualiza o intervalo histórico (apenas ciclos não-anómalos)."""
         duration     = self._tasks_in_cycle[-1].end_time - self._tasks_in_cycle[0].start_time
         cycle_number = self._completed_cycles + 1
+        start_time   = self._tasks_in_cycle[0].start_time
+        end_time     = self._tasks_in_cycle[-1].end_time
 
         # Anomalias não actualizam o intervalo nem a contagem de referência
         if not is_anomaly:
@@ -144,6 +116,8 @@ class CycleTracker:
         self._cycle_open        = not bool(self._expected_order)
 
         return CycleResult(
+            start_time=start_time,
+            end_time=end_time,
             duration=duration,
             cycle_number=cycle_number,
             sequence_in_order=sequence_in_order,

@@ -28,6 +28,7 @@ import pandas as pd
 import yaml
 
 from src.shared.event_type import EventType
+from src.tracking.order_matching import matches_order
 
 _SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
 
@@ -56,27 +57,9 @@ def _col_names(expected_order: list[str]) -> list[str]:
     return names
 
 
-def _matches_order(actual: list[str], expected: list[str]) -> bool:
-    """Verifica se a sequência real respeita a ordem esperada (permite repetições consecutivas)."""
-    if not expected:
-        return True
-    if not actual:
-        return False
-    ptr, entered = 0, False
-    for zone in actual:
-        if zone == expected[ptr]:
-            entered = True
-        elif entered and ptr + 1 < len(expected) and zone == expected[ptr + 1]:
-            ptr    += 1
-            entered = True
-        else:
-            return False
-    return entered and ptr == len(expected) - 1
-
-
 def _cell_value(had_timeout: bool, completed: bool, duration_s: float | None) -> str:
     if completed:
-        return f"{_CELL_TIMEOUT_OK}  {duration_s:.1f}s" if had_timeout else f"{duration_s:.1f}s"
+        return f"{_CELL_TIMEOUT_OK} {duration_s:.1f}s" if had_timeout else f"{duration_s:.1f}s"
     return _CELL_TIMEOUT if had_timeout else _CELL_ABSENT
 
 
@@ -119,41 +102,6 @@ def _remaining_timeouts(
     return result
 
 
-def _fill_zone_cells(
-    expected_order:    list[str],
-    col_names:         list[str],
-    completes_by_zone: dict[str, list[tuple]],
-    timeouts_by_zone:  dict[str, list[str]],
-    remaining_ptr:     dict[str, int],
-) -> dict[str, str]:
-    """Preenche uma célula por ocorrência de zona usando matching cronológico."""
-    complete_ptr: dict[str, int] = defaultdict(int)
-    cells: dict[str, str] = {}
-
-    for zone, col in zip(expected_order, col_names):
-        c_idx     = complete_ptr[zone]
-        completes = completes_by_zone[zone]
-        timeouts  = timeouts_by_zone[zone]
-
-        if c_idx < len(completes):
-            c_ts, c_dur = completes[c_idx]
-            complete_ptr[zone] += 1
-            prev_ts     = completes[c_idx - 1][0] if c_idx > 0 else ""
-            had_timeout = any(prev_ts < t_ts < c_ts for t_ts in timeouts)
-            cells[col]  = _cell_value(had_timeout, True, c_dur)
-        else:
-            if remaining_ptr.get(zone, 0) > 0:
-                remaining_ptr[zone] -= 1
-                cells[col] = _cell_value(False, False, None)  # TIMEOUT
-            else:
-                cells[col] = _cell_value(False, False, None)  # —
-
-            # Distinguir TIMEOUT de ABSENT com base nos timeouts sobrantes já consumidos
-            cells[col] = _CELL_TIMEOUT if _cell_value(False, False, None) != cells[col] else _CELL_ABSENT
-
-    return cells
-
-
 def _build_row(
     group:          pd.DataFrame,
     expected_order: list[str],
@@ -191,7 +139,7 @@ def _build_row(
         .sort_values("timestamp_iso")
     )
     actual_seq    = list(complete_rows["zone"])
-    result["Ordem correta"] = "Sim" if _matches_order(actual_seq, expected_order) else "Não"
+    result["Ordem correta"] = "Sim" if matches_order(actual_seq, expected_order) else "Não"
 
     # Estado: correto apenas se todas as colunas têm complete E a ordem está certa
     all_complete    = all(result[col] not in (_CELL_ABSENT, _CELL_TIMEOUT) for col in col_names)
@@ -255,4 +203,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-```

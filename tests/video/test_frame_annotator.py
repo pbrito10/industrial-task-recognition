@@ -13,17 +13,14 @@ def _blank(h=200, w=200) -> np.ndarray:
 
 # --- zone_color ---
 
-def test_zone_color_montagem():
-    assert frame_annotator.zone_color("Montagem") == (0, 165, 255)
+def test_zone_color_is_stable_for_same_name():
+    assert frame_annotator.zone_color("Montagem") == frame_annotator.zone_color("Montagem")
 
 
-def test_zone_color_saida():
-    assert frame_annotator.zone_color("Saida") == (255, 100, 0)
-
-
-def test_zone_color_unknown_returns_default():
+def test_zone_color_returns_bgr_tuple():
     color = frame_annotator.zone_color("ZonaQualquer")
-    assert color == (50, 205, 50)
+    assert len(color) == 3
+    assert all(0 <= channel <= 255 for channel in color)
 
 
 # --- draw_hand ---

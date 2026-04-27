@@ -6,7 +6,7 @@ e a integração com HandDetection, que são independentes do modelo.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -34,11 +34,16 @@ def _make_result(landmarks_list, handedness_list):
 
 @pytest.fixture
 def detector():
-    """Cria um MediapipeDetector com o HandLandmarker mockado."""
-    with patch("src.detection.mediapipe_detector.mp_vision.HandLandmarker.create_from_options") as mock_create:
-        mock_create.return_value = MagicMock()
-        det = MediapipeDetector(model_path="fake_path.task")
-    return det
+    """Cria um MediapipeDetector sem carregar MediaPipe."""
+    fake_mp = SimpleNamespace(
+        Image=lambda image_format, data: SimpleNamespace(image_format=image_format, data=data),
+        ImageFormat=SimpleNamespace(SRGB="SRGB"),
+    )
+    return MediapipeDetector(
+        model_path="fake_path.task",
+        landmarker=MagicMock(),
+        mp_module=fake_mp,
+    )
 
 
 # --- _to_pixel_point ---
