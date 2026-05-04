@@ -169,6 +169,23 @@ def test_log_cycle_complete_duration(logger):
     assert float(row["duration_s"]) == pytest.approx(45.0)
 
 
+# --- log_detection_gap ---
+
+
+def test_log_detection_gap_sets_hand(logger):
+    log, tmp_path = logger
+    log.log_detection_gap(
+        _T0 + timedelta(seconds=2),
+        timedelta(seconds=2),
+        timedelta(seconds=4),
+        "right",
+    )
+    row = _read_csv(tmp_path)[0]
+    assert row["event_type"] == "DETECTION_GAP"
+    assert row["hand"] == "right"
+    assert float(row["duration_s"]) == pytest.approx(4.0)
+
+
 # --- Múltiplos eventos e flush ---
 
 def test_multiple_events_written(logger):

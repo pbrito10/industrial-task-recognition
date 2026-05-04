@@ -77,6 +77,8 @@ class TestOneHandStateMachine:
         assert event is not None
         assert event.zone_name == "Porca"
         assert event.was_forced is False
+        assert event.start_time == _T0 + timedelta(seconds=0.1)
+        assert event.duration == timedelta(seconds=0.9)
         assert m.state() == TaskState.IDLE
 
     def test_exits_during_dwell_resets_to_idle(self):
@@ -182,6 +184,8 @@ class TestTwoHandsStateMachine:
         assert event is not None
         assert event.zone_name == "Montagem"
         assert event.was_forced is False
+        assert event.start_time == _T0 + timedelta(seconds=0.2)
+        assert event.duration == timedelta(seconds=0.8)
 
 
 # --- TaskStateMachine ---

@@ -38,9 +38,9 @@ tracking:
   cycle_zone_order:              # ordem esperada das zonas num ciclo completo
                                  # a Zona das Rodas pode aparecer 1 a 4 vezes
                                  # dependendo de quantas rodas o operador traz de cada vez
-    - "Porca"
-    - "Montagem"
     - "Chassi Inferior"
+    - "Montagem"
+    - "Porca"
     - "Montagem"
     - "Rodas"
     - "Montagem"
@@ -50,7 +50,7 @@ tracking:
     - "Montagem"
     - "Saida"
   exit_zone: "Saida"     # zona cuja conclusão fecha o ciclo
-  detection_gap_threshold_s: 1.0  # gap mínimo sem deteção (s) para registar no CSV
+  detection_gap_threshold_s: 1.0  # gap mínimo sem detetar uma mão (s) para registar no CSV/frame
 
 dashboard:
   data_path: "dashboard/data/metrics.json"

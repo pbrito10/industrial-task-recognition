@@ -68,9 +68,9 @@ class _ZoneTransitionTracker:
 
 
 class _DetectionGapTracker:
-    """Deteta períodos sem deteção de mãos e regista-os no DebugLogger.
+    """Deteta períodos sem deteção por mão e regista-os no DebugLogger.
 
-    Um gap só é registado quando as mãos reaparecem (ou no fim da sessão),
+    Um gap só é registado quando a mão reaparece (ou no fim da sessão),
     porque só então se conhece a duração real. Gaps abaixo do threshold
     são ignorados — correspondem a falhas de deteção pontuais inevitáveis.
 
@@ -95,54 +95,68 @@ class _DetectionGapTracker:
         self._cycle_number_fn  = cycle_number_fn
         self._rois             = rois
         self._color_scheme     = color_scheme
-        self._gap_start        = None  # datetime | None
-        self._gap_frame        = None  # primeiro frame RGB sem deteção
-        self._gaps_per_cycle:  dict[int, int] = {}  # ciclo → nº de gaps já guardados
+        self._seen_hands: set[str] = set()
+        self._gap_start_by_hand: dict[str, object] = {}
+        self._gap_frame_by_hand: dict[str, object] = {}
+        self._gaps_per_cycle: dict[tuple[int, str], int] = {}  # (ciclo, mão) → nº gaps
 
-    def update(self, has_detections: bool, now, frame_rgb, debug_logger) -> None:
-        """Chama por frame. has_detections=True se pelo menos uma mão foi detetada."""
-        if not has_detections:
-            if self._gap_start is None:
-                self._gap_start = now
-                self._gap_frame = frame_rgb  # guarda o primeiro frame do gap
-            return
+    def update(self, detections, now, frame_rgb, debug_logger) -> None:
+        """Chama por frame e acompanha gaps independentes para left/right.
 
-        if self._gap_start is not None:
-            self._flush(now, debug_logger)
+        Só abre gap para uma mão depois de essa mão já ter sido vista pelo menos
+        uma vez na sessão. Isto evita registar como falha uma mão que ainda não
+        entrou no campo de visão desde o arranque.
+        """
+        current_hands = {detection.hand_side.value for detection in detections}
+
+        for hand_side in current_hands:
+            if hand_side in self._gap_start_by_hand:
+                self._flush(hand_side, now, debug_logger)
+
+        tracked_hands = self._seen_hands | current_hands
+        for hand_side in tracked_hands - current_hands:
+            if hand_side not in self._gap_start_by_hand:
+                self._gap_start_by_hand[hand_side] = now
+                self._gap_frame_by_hand[hand_side] = frame_rgb
+
+        self._seen_hands |= current_hands
 
     def flush(self, now, debug_logger) -> None:
-        """Chama no fim da sessão para fechar um gap ainda em aberto."""
-        if self._gap_start is not None:
-            self._flush(now, debug_logger)
+        """Chama no fim da sessão para fechar gaps ainda em aberto."""
+        for hand_side in list(self._gap_start_by_hand):
+            self._flush(hand_side, now, debug_logger)
 
-    def _flush(self, now, debug_logger) -> None:
-        duration = now - self._gap_start
+    def _flush(self, hand_side: str, now, debug_logger) -> None:
+        gap_start = self._gap_start_by_hand[hand_side]
+        duration = now - gap_start
         if duration >= self._threshold:
-            relative = self._gap_start - self._session_start
-            debug_logger.log_detection_gap(self._gap_start, relative, duration)
-            self._save_frame()
-        self._gap_start = None
-        self._gap_frame = None
+            relative = gap_start - self._session_start
+            debug_logger.log_detection_gap(gap_start, relative, duration, hand_side)
+            self._save_frame(hand_side)
+        self._gap_start_by_hand.pop(hand_side, None)
+        self._gap_frame_by_hand.pop(hand_side, None)
 
-    def _save_frame(self) -> None:
-        """Guarda o primeiro frame do gap como JPEG nomeado pelo ciclo atual."""
+    def _save_frame(self, hand_side: str) -> None:
+        """Guarda o primeiro frame do gap como JPEG nomeado por mão e ciclo."""
         import cv2
         import numpy as np
         from src.video import frame_annotator
 
-        if self._gap_frame is None:
+        gap_frame = self._gap_frame_by_hand.get(hand_side)
+        if gap_frame is None:
             return
 
         cycle = self._cycle_number_fn()
-        count = self._gaps_per_cycle.get(cycle, 0) + 1
-        self._gaps_per_cycle[cycle] = count
+        key = (cycle, hand_side)
+        count = self._gaps_per_cycle.get(key, 0) + 1
+        self._gaps_per_cycle[key] = count
 
-        # gap_ciclo_002.jpg  ou  gap_ciclo_002_2.jpg se houver mais do que um no mesmo ciclo
+        # gap_right_ciclo_002.jpg ou gap_right_ciclo_002_2.jpg se houver repetição
         suffix   = f"_{count}" if count > 1 else ""
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        filename = self._output_dir / f"gap_ciclo_{cycle:03d}{suffix}.jpg"
+        filename = self._output_dir / f"gap_{hand_side}_ciclo_{cycle:03d}{suffix}.jpg"
 
-        frame_bgr = cv2.cvtColor(np.asarray(self._gap_frame), cv2.COLOR_RGB2BGR)
+        frame_bgr = cv2.cvtColor(np.asarray(gap_frame), cv2.COLOR_RGB2BGR)
         frame_annotator.draw_rois(frame_bgr, self._rois, color_scheme=self._color_scheme)
         cv2.imwrite(str(filename), frame_bgr)
 
@@ -263,7 +277,7 @@ class _MonitorSession:
         self._frame_idx += 1
         now = datetime.now()
 
-        self._gap_tracker.update(bool(maos), now, frame_rgb, debug_logger)
+        self._gap_tracker.update(maos, now, frame_rgb, debug_logger)
 
         classified_hands = self._zone_classifier.classify(maos)
         self._transition_tracker.track(classified_hands, now, self._frame_idx, debug_logger)

@@ -77,6 +77,11 @@ class _BaseStateMachine(StateMachineInterface):
         """Repõe todos os campos de estado a None/IDLE. Implementado por cada subclasse."""
         ...
 
+    def _confirm_task_from_dwell(self, dwell_start: datetime) -> None:
+        """Confirma uma tarefa real e inclui o dwell na duração produtiva."""
+        self._task_state = TaskState.TASK_IN_PROGRESS
+        self._task_start = dwell_start
+
 
 class OneHandStateMachine(_BaseStateMachine):
     """Máquina de estados para zonas que exigem apenas uma mão.
@@ -141,8 +146,7 @@ class OneHandStateMachine(_BaseStateMachine):
         if self._dwell_start is None:
             self._dwell_start = frame_time
         elif frame_time - self._dwell_start >= self._dwell_time:
-            self._task_state = TaskState.TASK_IN_PROGRESS
-            self._task_start = frame_time
+            self._confirm_task_from_dwell(self._dwell_start)
 
         self._prev_detection = hand
 
@@ -265,8 +269,7 @@ class TwoHandsStateMachine(_BaseStateMachine):
         if self._dwell_start is None:
             self._dwell_start = frame_time
         elif frame_time - self._dwell_start >= self._dwell_time:
-            self._task_state = TaskState.TASK_IN_PROGRESS
-            self._task_start = frame_time
+            self._confirm_task_from_dwell(self._dwell_start)
 
     def _handle_in_progress(
         self,

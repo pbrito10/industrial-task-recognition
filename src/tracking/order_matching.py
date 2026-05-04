@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 RESULT_IN_ORDER = "Em ordem"
 RESULT_INCOMPLETE = "Sequência incompleta"
 RESULT_OUT_OF_ORDER = "Fora de ordem"
+
+_OCCURRENCE_LIMITS = {
+    "Rodas": (1, 4),
+}
 
 
 @dataclass(frozen=True)
@@ -18,7 +22,9 @@ def matches_order(actual: list[str], expected: list[str]) -> bool:
     """Verifica se a sequência real respeita a ordem esperada.
 
     Permite repetições consecutivas da mesma zona, mas não permite saltar zonas
-    nem visitá-las fora de ordem.
+    nem visitá-las fora de ordem. A zona "Rodas" tem uma regra de negócio
+    específica: quando aparece na ordem esperada, aceita 1 a 4 presenças,
+    incluindo idas repetidas no formato Rodas -> zona seguinte -> Rodas.
     """
     if not expected:
         return True
@@ -27,14 +33,28 @@ def matches_order(actual: list[str], expected: list[str]) -> bool:
 
     ptr = 0
     entered_current = False
+    occurrences: dict[int, int] = {}
 
     for zone in actual:
         if zone == expected[ptr]:
             entered_current = True
+            count = _record_occurrence(occurrences, ptr)
+            if _exceeds_occurrence_limit(zone, count):
+                return False
+            continue
+        if _can_repeat_previous_limited_zone(zone, expected, ptr, entered_current):
+            ptr = ptr - 1
+            entered_current = True
+            count = _record_occurrence(occurrences, ptr)
+            if _exceeds_occurrence_limit(zone, count):
+                return False
             continue
         if entered_current and ptr + 1 < len(expected) and zone == expected[ptr + 1]:
             ptr += 1
             entered_current = True
+            count = _record_occurrence(occurrences, ptr)
+            if _exceeds_occurrence_limit(zone, count):
+                return False
             continue
         return False
 
@@ -57,6 +77,7 @@ def diagnose_order(actual: Sequence[str], expected: Sequence[str]) -> OrderDiagn
 
     ptr             = 0
     entered_current = False
+    occurrences: dict[int, int] = {}
     missing: list[str] = []
 
     for zone in actual_list:
@@ -68,6 +89,17 @@ def diagnose_order(actual: Sequence[str], expected: Sequence[str]) -> OrderDiagn
 
         if zone == expected_list[ptr]:
             entered_current = True
+            count = _record_occurrence(occurrences, ptr)
+            if _exceeds_occurrence_limit(zone, count):
+                return _too_many_occurrences_diagnosis(zone, count)
+            continue
+
+        if _can_repeat_previous_limited_zone(zone, expected_list, ptr, entered_current):
+            ptr = ptr - 1
+            entered_current = True
+            count = _record_occurrence(occurrences, ptr)
+            if _exceeds_occurrence_limit(zone, count):
+                return _too_many_occurrences_diagnosis(zone, count)
             continue
 
         search_start = ptr + 1 if entered_current else ptr
@@ -77,6 +109,9 @@ def diagnose_order(actual: Sequence[str], expected: Sequence[str]) -> OrderDiagn
             missing.extend(expected_list[missing_start:next_index])
             ptr = next_index
             entered_current = True
+            count = _record_occurrence(occurrences, ptr)
+            if _exceeds_occurrence_limit(zone, count):
+                return _too_many_occurrences_diagnosis(zone, count)
             continue
 
         expected_zone = _next_expected_zone(expected_list, ptr, entered_current)
@@ -107,6 +142,42 @@ def _next_expected_zone(expected: Sequence[str], ptr: int, entered_current: bool
     if entered_current and ptr + 1 < len(expected):
         return expected[ptr + 1]
     return expected[ptr]
+
+
+def _record_occurrence(occurrences: dict[int, int], expected_index: int) -> int:
+    count = occurrences.get(expected_index, 0) + 1
+    occurrences[expected_index] = count
+    return count
+
+
+def _can_repeat_previous_limited_zone(
+    zone: str,
+    expected: Sequence[str],
+    ptr: int,
+    entered_current: bool,
+) -> bool:
+    return (
+        entered_current
+        and ptr > 0
+        and zone == expected[ptr - 1]
+        and zone in _OCCURRENCE_LIMITS
+    )
+
+
+def _exceeds_occurrence_limit(zone: str, count: int) -> bool:
+    limit = _OCCURRENCE_LIMITS.get(zone)
+    if limit is None:
+        return False
+    _, max_count = limit
+    return count > max_count
+
+
+def _too_many_occurrences_diagnosis(zone: str, count: int) -> OrderDiagnosis:
+    min_count, max_count = _OCCURRENCE_LIMITS[zone]
+    return OrderDiagnosis(
+        RESULT_OUT_OF_ORDER,
+        f'A zona "{zone}" apareceu {count} vezes; o intervalo aceite é {min_count} a {max_count} presenças.',
+    )
 
 
 def _join_zones(zones: Sequence[str]) -> str:

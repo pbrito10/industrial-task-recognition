@@ -13,6 +13,7 @@ from src.tracking.task_event import TaskEvent
 _T0 = datetime(2024, 1, 1, 12, 0, 0)
 
 _ORDER = ["Porca", "Montagem", "Chassi", "Saida"]
+_WHEEL_ORDER = ["Porca", "Rodas", "Montagem", "Saida"]
 
 
 def _event(zone: str, offset_s: float, duration_s: float = 2.0, forced: bool = False) -> TaskEvent:
@@ -29,6 +30,30 @@ class TestMatchesOrder:
 
     def test_repeated_zone_allowed(self):
         assert matches_order(["Porca", "Porca", "Montagem", "Chassi", "Saida"], _ORDER)
+
+    def test_wheels_allowed_between_one_and_four_times(self):
+        assert matches_order(["Porca", "Rodas", "Montagem", "Saida"], _WHEEL_ORDER)
+        assert matches_order(["Porca", "Rodas", "Rodas", "Rodas", "Rodas", "Montagem", "Saida"], _WHEEL_ORDER)
+        assert matches_order(["Porca", "Rodas", "Montagem", "Rodas", "Montagem", "Saida"], _WHEEL_ORDER)
+
+    def test_more_than_four_wheels_fails(self):
+        assert not matches_order(
+            [
+                "Porca",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Saida",
+            ],
+            _WHEEL_ORDER,
+        )
 
     def test_skipped_zone_fails(self):
         assert not matches_order(["Porca", "Chassi", "Saida"], _ORDER)
@@ -78,6 +103,28 @@ class TestDiagnoseOrder:
 
         assert diagnosis.result == RESULT_OUT_OF_ORDER
         assert 'Esperava "Montagem", mas apareceu "Intruso".' == diagnosis.problem
+
+    def test_more_than_four_wheels_is_out_of_order(self):
+        diagnosis = diagnose_order(
+            [
+                "Porca",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Rodas",
+                "Montagem",
+                "Saida",
+            ],
+            _WHEEL_ORDER,
+        )
+
+        assert diagnosis.result == RESULT_OUT_OF_ORDER
+        assert diagnosis.problem == 'A zona "Rodas" apareceu 5 vezes; o intervalo aceite é 1 a 4 presenças.'
 
 
 # --- CycleTracker ---

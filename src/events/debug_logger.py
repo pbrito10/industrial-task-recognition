@@ -83,17 +83,19 @@ class DebugLogger:
         gap_start: datetime,
         relative:  timedelta,
         duration:  timedelta,
+        hand_side: str | None = None,
     ) -> None:
-        """Regista um período sem deteção de mãos que excedeu o threshold.
+        """Regista um período sem deteção de uma mão que excedeu o threshold.
 
-        Gaps curtos (~1s) indicam falha de deteção; gaps longos indicam
-        interrupção ou abandono da bancada — distinguíveis pela duration_s.
+        `hand_side` identifica qual mão desapareceu quando a perda é parcial.
+        Fica opcional para preservar compatibilidade com gaps globais antigos.
         """
         row = self._empty_row()
         row.update({
             "timestamp_iso":   gap_start.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3],
             "relative_time_s": round(relative.total_seconds(), 3),
             "event_type":      EventType.DETECTION_GAP.value,
+            "hand":            hand_side or "",
             "duration_s":      round(duration.total_seconds(), 3),
         })
         self._write(row)

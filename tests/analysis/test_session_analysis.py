@@ -71,6 +71,51 @@ def test_build_table_marks_timeout_without_recovery_as_anomaly(tmp_path):
     assert table.loc[1, "Problema detetado"] == 'Faltaram zonas esperadas: "Montagem".'
 
 
+def test_build_table_accepts_one_to_four_wheel_presences(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_analysis, "_load_expected_order", lambda: ["Porca", "Rodas", "Montagem", "Saida"])
+    csv_path = _write_debug_csv(tmp_path, [
+        _row("2024-01-01T10:00:01.000", "TASK_COMPLETE", "Porca", 2.0),
+        _row("2024-01-01T10:00:02.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:03.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:04.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:05.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:06.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:07.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:08.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:09.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:10.000", "TASK_COMPLETE", "Saida", 1.5),
+    ])
+
+    table = session_analysis.build_table(csv_path)
+
+    assert table.loc[1, "Ordem correta"] == "Sim"
+    assert table.loc[1, "Resultado do sistema"] == "Em ordem"
+
+
+def test_build_table_flags_more_than_four_wheel_presences(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_analysis, "_load_expected_order", lambda: ["Porca", "Rodas", "Montagem", "Saida"])
+    csv_path = _write_debug_csv(tmp_path, [
+        _row("2024-01-01T10:00:01.000", "TASK_COMPLETE", "Porca", 2.0),
+        _row("2024-01-01T10:00:02.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:03.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:04.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:05.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:06.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:07.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:08.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:09.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:10.000", "TASK_COMPLETE", "Rodas", 1.0),
+        _row("2024-01-01T10:00:11.000", "TASK_COMPLETE", "Montagem", 4.0),
+        _row("2024-01-01T10:00:12.000", "TASK_COMPLETE", "Saida", 1.5),
+    ])
+
+    table = session_analysis.build_table(csv_path)
+
+    assert table.loc[1, "Ordem correta"] == "Não"
+    assert table.loc[1, "Resultado do sistema"] == "Fora de ordem"
+    assert table.loc[1, "Problema detetado"] == 'A zona "Rodas" apareceu 5 vezes; o intervalo aceite é 1 a 4 presenças.'
+
+
 def test_repeated_zones_get_numbered_columns():
     cols = session_analysis._col_names(["Montagem", "Porca", "Montagem"])
 
