@@ -7,6 +7,7 @@ import pytest
 from tests.conftest import make_hand
 from src.events.debug_logger import DebugLogger, _COLUMNS
 from src.tracking.cycle_result import CycleResult
+from src.tracking.task_diagnostic import TaskDiagnostic
 from src.tracking.task_event import TaskEvent
 
 _SESSION_START = datetime(2024, 3, 15, 9, 30, 0)
@@ -137,6 +138,27 @@ def test_log_task_timeout_event_type(logger):
     log.log_task_timeout(_task_event("Rodas", forced=True))
     row = _read_csv(tmp_path)[0]
     assert row["event_type"] == "TASK_TIMEOUT"
+
+
+# --- log_task_rejected ---
+
+
+def test_log_task_rejected_reason(logger):
+    log, tmp_path = logger
+    log.log_task_rejected(TaskDiagnostic(
+        zone_name="Saida",
+        timestamp=_T0 + timedelta(seconds=2),
+        duration=timedelta(seconds=0.7),
+        cycle_number=3,
+        reason="LEFT_BEFORE_STILLNESS",
+    ))
+
+    row = _read_csv(tmp_path)[0]
+    assert row["event_type"] == "TASK_REJECTED"
+    assert row["zone"] == "Saida"
+    assert row["reason"] == "LEFT_BEFORE_STILLNESS"
+    assert row["cycle_number"] == "3"
+    assert float(row["duration_s"]) == pytest.approx(0.7)
 
 
 # --- log_cycle_complete ---

@@ -137,7 +137,6 @@ No final de cada sessão, guardar:
 - pasta completa em `output/sessions/<data_hora>/`;
 - `debug_*.csv`;
 - `sessao_*.xlsx`;
-- `debug_*_anomalias.xlsx`, gerado pela opção `5`;
 - vídeo anotado em `video/`;
 - imagens `frames/gaps/gap_ciclo_*.jpg`;
 - tabela manual de ground truth.
@@ -167,7 +166,7 @@ Taxa de falsos negativos = falsos negativos / ciclos realmente anómalos
 Para cada falso positivo e falso negativo:
 
 - consultar o CSV de debug;
-- verificar se houve `DETECTION_GAP`;
+- verificar se houve `DETECTION_GAP` ou `TASK_REJECTED`;
 - consultar o vídeo anotado e as imagens `frames/gaps/gap_ciclo_*.jpg`;
 - verificar a sequência real registada;
 - verificar timeouts;
@@ -176,6 +175,8 @@ Para cada falso positivo e falso negativo:
 O resultado desta fase deve indicar quantos erros foram causados por:
 
 - falha de deteção da mão;
+- saída antes do tempo de validação da tarefa;
+- falha de stillness;
 - problemas de ROI/câmara;
 - timeout indevido;
 - anomalia real não detetada;

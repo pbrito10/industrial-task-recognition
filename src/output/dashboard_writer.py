@@ -20,6 +20,7 @@ class DashboardWriter(OutputInterface):
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, snapshot: MetricsSnapshot) -> None:
+        """Escreve o snapshot no JSON do dashboard usando rename atómico."""
         data      = self._serialize(snapshot)
         temp_path = self._output_path.with_suffix(".tmp")
         temp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -74,4 +75,17 @@ class DashboardWriter(OutputInterface):
             "count_to_review":         metrics.count_to_review(),
             "count_probably_complete": metrics.count_probably_complete(),
             "count_anomalies":         metrics.count_anomalies(),
+            "recent_cycles":           self._serialize_recent_cycles(metrics),
         }
+
+    def _serialize_recent_cycles(self, metrics) -> list[dict]:
+        """Últimos ciclos completos para o gráfico do dashboard."""
+        recent = metrics.recent_durations()
+        first_cycle_number = metrics.count() - len(recent) + 1
+        return [
+            {
+                "cycle": first_cycle_number + idx,
+                "duration_s": round(duration.total_seconds(), 3),
+            }
+            for idx, duration in enumerate(recent)
+        ]

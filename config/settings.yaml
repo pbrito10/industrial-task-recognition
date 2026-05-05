@@ -17,13 +17,13 @@ calibration:
 detection:
   model_path: "model/hand_landmarker.task"
   max_num_hands: 2
-  min_detection_confidence: 0.7
-  min_tracking_confidence: 0.7
+  min_detection_confidence: 0.8
+  min_tracking_confidence: 0.8
 
 tracking:
-  dwell_time_seconds: 0.5       # tempo mínimo na zona para confirmar tarefa
+  dwell_time_seconds: 0.3       # tempo mínimo na zona para confirmar tarefa
   task_timeout_seconds: 30.0    # tempo máximo numa tarefa antes de forçar fecho
-  stillness_threshold_px: 5.0   # velocidade máxima do pulso (px/frame) para considerar mão parada
+  stillness_threshold_px: 8.0   # velocidade máxima do centróide MCP (px/frame) para considerar mão parada
                                  # cobre: pausas do operador e falhas de deteção
   zones:                         # zonas físicas únicas da bancada (para desenhar as ROIs)
     - "Porca"
@@ -35,6 +35,9 @@ tracking:
     - "Saida"
   two_hands_zones:               # zonas que exigem as duas mãos em simultâneo
     - "Montagem"
+  two_hands_missing_tolerance_seconds: 0.3
+                                 # tempo máximo que uma zona de duas mãos tolera
+                                 # só uma mão visível antes de fechar a tarefa
   cycle_zone_order:              # ordem esperada das zonas num ciclo completo
                                  # a Zona das Rodas pode aparecer 1 a 4 vezes
                                  # dependendo de quantas rodas o operador traz de cada vez

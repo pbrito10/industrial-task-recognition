@@ -22,9 +22,11 @@ class VideoRecorder:
 
     @property
     def path(self) -> Path:
+        """Caminho do ficheiro de vídeo que será escrito."""
         return self._path
 
     def write(self, frame_bgr: np.ndarray) -> None:
+        """Escreve um frame BGR respeitando o FPS nominal configurado."""
         if not self._enabled:
             return
 
@@ -39,6 +41,7 @@ class VideoRecorder:
         self._last_write_at = now
 
     def close(self) -> None:
+        """Liberta o VideoWriter se tiver sido aberto."""
         if self._writer is not None:
             self._writer.release()
             self._writer = None

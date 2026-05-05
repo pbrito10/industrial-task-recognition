@@ -157,6 +157,55 @@ class TestCycleTracker:
         result = tracker.record(_event("Saida", 2, forced=True))
         assert result is None
 
+    def test_new_start_zone_closes_previous_incomplete_cycle(self, tracker):
+        tracker.record(_event("Porca", 0))
+        tracker.record(_event("Montagem", 2))
+
+        result = tracker.record(_event("Porca", 10))
+
+        assert result is not None
+        assert result.cycle_number == 1
+        assert result.sequence_in_order is False
+        assert result.actual_sequence == ("Porca", "Montagem")
+        assert tracker.current_cycle_number() == 2
+        assert tracker.last_event_started_new_cycle() is True
+
+        tracker.record(_event("Montagem", 12))
+        assert tracker.last_event_started_new_cycle() is False
+        tracker.record(_event("Chassi", 14))
+        next_result = tracker.record(_event("Saida", 16))
+
+        assert next_result is not None
+        assert next_result.cycle_number == 2
+        assert next_result.sequence_in_order is True
+        assert next_result.actual_sequence == ("Porca", "Montagem", "Chassi", "Saida")
+
+    def test_repeated_start_zone_before_progress_does_not_close_cycle(self, tracker):
+        tracker.record(_event("Porca", 0))
+        assert tracker.record(_event("Porca", 2)) is None
+        assert tracker.last_event_started_new_cycle() is False
+
+        tracker.record(_event("Montagem", 4))
+        tracker.record(_event("Chassi", 6))
+        result = tracker.record(_event("Saida", 8))
+
+        assert result is not None
+        assert result.sequence_in_order is True
+        assert result.actual_sequence == ("Porca", "Porca", "Montagem", "Chassi", "Saida")
+
+    def test_forced_start_zone_does_not_close_previous_cycle(self, tracker):
+        tracker.record(_event("Porca", 0))
+        tracker.record(_event("Montagem", 2))
+
+        assert tracker.record(_event("Porca", 4, forced=True)) is None
+        assert tracker.current_cycle_number() == 1
+
+        tracker.record(_event("Chassi", 6))
+        result = tracker.record(_event("Saida", 8))
+
+        assert result is not None
+        assert result.sequence_in_order is True
+
     def test_correct_order_flagged(self, tracker):
         for i, zone in enumerate(["Porca", "Montagem", "Chassi", "Saida"]):
             result = tracker.record(_event(zone, i * 2))

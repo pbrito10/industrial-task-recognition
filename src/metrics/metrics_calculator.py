@@ -32,6 +32,7 @@ class MetricsCalculator:
         self._interruption_time = timedelta(0)
 
     def record(self, event: TaskEvent) -> None:
+        """Integra uma tarefa nas métricas produtivas ou de interrupção."""
         if event.was_forced:
             self._interruption_time += event.duration
             return
@@ -54,6 +55,7 @@ class MetricsCalculator:
         self._cycle_metrics.add(cycle_result.duration, cycle_result.sequence_in_order, cycle_result.is_anomaly)
 
     def snapshot(self) -> MetricsSnapshot:
+        """Congela o estado atual das métricas para outputs e dashboard."""
         now              = datetime.now()
         session_duration = now - self._session_start
         transition_time  = self._transition_time(session_duration)

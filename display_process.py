@@ -5,6 +5,7 @@
 
 
 def run(detection_queue, stop_event):
+    """Processo de teste: mostra deteções em tempo real numa janela OpenCV."""
     import os
     import queue
     import time

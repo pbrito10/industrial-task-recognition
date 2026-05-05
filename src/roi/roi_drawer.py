@@ -147,12 +147,15 @@ class _DrawingSession:
 
     @property
     def rois(self) -> RoiCollection:
+        """Coleção de ROIs desenhadas até ao momento."""
         return self._rois
 
     def render(self, frame: np.ndarray) -> None:
+        """Desenha ROIs, preview e mensagens da sessão sobre o frame."""
         _render(frame, self._rois, self._session)
 
     def handle_mouse(self, event: int, x: int, y: int, flags: int, param) -> None:
+        """Atualiza o estado de desenho em resposta a eventos do rato."""
         point = Point(x=x, y=y)
         self._session.mouse.position = point
 
@@ -165,6 +168,7 @@ class _DrawingSession:
             handler(point)
 
     def handle_key(self, key: int) -> _Signal:
+        """Converte teclas do OpenCV em ações da sessão de desenho."""
         if key == ord('q'):
             return _Signal.QUIT
         if key == ord('s'):
@@ -252,6 +256,7 @@ class RoiDrawer:
         self._color_scheme   = color_scheme
 
     def draw(self, initial_rois: RoiCollection) -> RoiCollection | None:
+        """Executa a sessão interativa e devolve ROIs guardadas, ou None ao sair."""
         camera  = self._camera_factory()
         session = _DrawingSession(self._zone_names, initial_rois, self._color_scheme)
 

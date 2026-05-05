@@ -19,6 +19,7 @@ class RoiCollection:
         self._rois[roi.name] = roi
 
     def remove(self, name: str) -> None:
+        """Remove a zona pelo nome, ignorando se ela não existir."""
         self._rois.pop(name, None)
 
     def find_zone_for_point(self, point: Point) -> RegionOfInterest | None:

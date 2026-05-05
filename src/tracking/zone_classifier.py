@@ -19,6 +19,7 @@ class ZoneClassifier:
         self._rois = rois
 
     def classify(self, detections: list[HandDetection]) -> list[ClassifiedHand]:
+        """Classifica cada mão detetada na ROI correspondente, ou None."""
         return [self._classify_one(detection) for detection in detections]
 
     def _classify_one(self, detection: HandDetection) -> ClassifiedHand:

@@ -8,6 +8,13 @@ from src.detection.hand_detection import HandDetection
 from src.shared.hand_side import HandSide
 from src.shared.task_state import TaskState
 from src.tracking.activation_strategy import ActivationStrategy
+from src.tracking.task_diagnostic import (
+    REASON_LEFT_BEFORE_SECOND_HAND,
+    REASON_LEFT_BEFORE_STILLNESS,
+    REASON_LEFT_BEFORE_VALIDATION_TIME,
+    REASON_SECOND_HAND_TIMEOUT,
+    TaskDiagnostic,
+)
 from src.tracking.task_event import TaskEvent
 from src.tracking.zone_classifier import ClassifiedHand
 
@@ -26,10 +33,19 @@ class StateMachineInterface(ABC):
         self,
         classified_hands: list[ClassifiedHand],
         frame_time: datetime,
-    ) -> TaskEvent | None: ...
+    ) -> TaskEvent | None:
+        """Processa um frame classificado e pode emitir uma tarefa concluída."""
+        ...
 
     @abstractmethod
-    def state(self) -> TaskState: ...
+    def state(self) -> TaskState:
+        """Estado atual da máquina."""
+        ...
+
+    @abstractmethod
+    def pop_diagnostics(self) -> list[TaskDiagnostic]:
+        """Devolve e limpa diagnósticos pendentes."""
+        ...
 
 
 class _BaseStateMachine(StateMachineInterface):
@@ -56,9 +72,17 @@ class _BaseStateMachine(StateMachineInterface):
         self._task_state:   TaskState       = TaskState.IDLE
         self._tracked_zone: str | None      = None
         self._task_start:   datetime | None = None
+        self._candidate_start: datetime | None = None
+        self._diagnostics: list[TaskDiagnostic] = []
 
     def state(self) -> TaskState:
+        """Estado atual partilhado pelas subclasses."""
         return self._task_state
+
+    def pop_diagnostics(self) -> list[TaskDiagnostic]:
+        """Devolve e limpa diagnósticos acumulados nesta máquina."""
+        diagnostics, self._diagnostics = self._diagnostics, []
+        return diagnostics
 
     def _complete_task(self, end_time: datetime, was_forced: bool) -> TaskEvent:
         """Cria o TaskEvent, chama _reset_to_idle() e devolve o evento ao orquestrador."""
@@ -71,6 +95,19 @@ class _BaseStateMachine(StateMachineInterface):
         )
         self._reset_to_idle()
         return event
+
+    def _record_rejection(self, timestamp: datetime, reason: str) -> None:
+        """Guarda diagnóstico de uma tentativa descartada antes de TASK_COMPLETE."""
+        if self._tracked_zone is None or self._candidate_start is None:
+            return
+
+        self._diagnostics.append(TaskDiagnostic(
+            zone_name=self._tracked_zone,
+            timestamp=timestamp,
+            duration=timestamp - self._candidate_start,
+            cycle_number=self._cycle_number_fn(),
+            reason=reason,
+        ))
 
     @abstractmethod
     def _reset_to_idle(self) -> None:
@@ -102,17 +139,19 @@ class OneHandStateMachine(_BaseStateMachine):
         super().__init__(dwell_time, task_timeout, cycle_number_fn, strategy)
         self._prev_detection: HandDetection | None = None
         self._dwell_start:    datetime | None      = None
+        self._stillness_resets: int                 = 0
 
     def update(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> TaskEvent | None:
+        """Avança a máquina de uma mão para o frame atual."""
         if self._task_state == TaskState.IDLE:
-            return self._handle_idle(classified_hands)
+            return self._handle_idle(classified_hands, frame_time)
         if self._task_state == TaskState.DWELLING:
             return self._handle_dwelling(classified_hands, frame_time)
         if self._task_state == TaskState.TASK_IN_PROGRESS:
             return self._handle_in_progress(classified_hands, frame_time)
         return None
 
-    def _handle_idle(self, classified_hands: list[ClassifiedHand]) -> None:
+    def _handle_idle(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> None:
         # Fixa a primeira zona encontrada e avança — ignora as restantes
         # (o orquestrador garante que só chegamos aqui com _active a apontar para nós).
         for _, zone in classified_hands:
@@ -121,6 +160,8 @@ class OneHandStateMachine(_BaseStateMachine):
             self._tracked_zone   = zone.name
             self._prev_detection = None
             self._dwell_start    = None
+            self._candidate_start = frame_time
+            self._stillness_resets = 0
             self._task_state     = TaskState.DWELLING
             return
 
@@ -132,15 +173,19 @@ class OneHandStateMachine(_BaseStateMachine):
         hand = self._hand_in_tracked_zone(classified_hands)
 
         if hand is None:
-            # Saiu antes do dwell expirar — descarta sem emitir evento
+            # Saiu antes do tempo de validação terminar — descarta sem emitir evento
+            self._record_rejection(frame_time, self._dwell_rejection_reason())
             self._reset_to_idle()
             return
 
+        had_previous = self._prev_detection is not None
         if not self._strategy.is_active(hand, self._prev_detection):
             # Mão em movimento: reinicia o timer mas guarda a posição atual
             # para poder calcular velocidade no próximo frame.
             self._dwell_start    = None
             self._prev_detection = hand
+            if had_previous:
+                self._stillness_resets += 1
             return
 
         if self._dwell_start is None:
@@ -149,6 +194,11 @@ class OneHandStateMachine(_BaseStateMachine):
             self._confirm_task_from_dwell(self._dwell_start)
 
         self._prev_detection = hand
+
+    def _dwell_rejection_reason(self) -> str:
+        if self._stillness_resets > 0:
+            return REASON_LEFT_BEFORE_STILLNESS
+        return REASON_LEFT_BEFORE_VALIDATION_TIME
 
     def _handle_in_progress(
         self,
@@ -175,6 +225,8 @@ class OneHandStateMachine(_BaseStateMachine):
         self._tracked_zone   = None
         self._prev_detection = None
         self._dwell_start    = None
+        self._candidate_start = None
+        self._stillness_resets = 0
         self._task_start     = None
 
 
@@ -184,8 +236,8 @@ class TwoHandsStateMachine(_BaseStateMachine):
     IDLE → WAITING_SECOND_HAND → DWELLING_TWO_HANDS → TASK_IN_PROGRESS → IDLE
 
     O dwell só começa quando ambas as mãos estão paradas ao mesmo tempo.
-    Se qualquer mão sair durante TASK_IN_PROGRESS, a tarefa fecha imediatamente
-    — a lógica de montagem assume cooperação contínua de ambas as mãos.
+    Se qualquer mão sair durante TASK_IN_PROGRESS, a tarefa só fecha depois da
+    tolerância configurada — isto evita partir a Montagem por oclusões curtas.
 
     _prev_detections é um dict por HandSide para que cada mão tenha a sua
     referência de frame anterior independente no cálculo de velocidade.
@@ -201,15 +253,19 @@ class TwoHandsStateMachine(_BaseStateMachine):
         task_timeout:     timedelta,
         cycle_number_fn:  Callable[[], int],
         strategy:         ActivationStrategy,
+        missing_tolerance: timedelta = timedelta(0),
     ) -> None:
         super().__init__(dwell_time, task_timeout, cycle_number_fn, strategy)
         self._prev_detections: dict[HandSide, HandDetection] = {}
         self._waiting_start:   datetime | None               = None
         self._dwell_start:     datetime | None               = None
+        self._missing_tolerance = missing_tolerance
+        self._missing_since: datetime | None                  = None
 
     def update(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> TaskEvent | None:
+        """Avança a máquina de duas mãos para o frame atual."""
         if self._task_state == TaskState.IDLE:
-            return self._handle_idle(classified_hands)
+            return self._handle_idle(classified_hands, frame_time)
         if self._task_state == TaskState.WAITING_SECOND_HAND:
             return self._handle_waiting_second_hand(classified_hands, frame_time)
         if self._task_state == TaskState.DWELLING_TWO_HANDS:
@@ -218,7 +274,7 @@ class TwoHandsStateMachine(_BaseStateMachine):
             return self._handle_in_progress(classified_hands, frame_time)
         return None
 
-    def _handle_idle(self, classified_hands: list[ClassifiedHand]) -> None:
+    def _handle_idle(self, classified_hands: list[ClassifiedHand], frame_time: datetime) -> None:
         for _, zone in classified_hands:
             if zone is None:
                 continue
@@ -226,6 +282,7 @@ class TwoHandsStateMachine(_BaseStateMachine):
             self._prev_detections = {}
             self._waiting_start   = None
             self._dwell_start     = None
+            self._candidate_start = frame_time
             self._task_state      = TaskState.WAITING_SECOND_HAND
             return
 
@@ -238,6 +295,7 @@ class TwoHandsStateMachine(_BaseStateMachine):
 
         if len(hands) == 0:
             # A primeira mão saiu antes da segunda chegar — recomeça do zero
+            self._record_rejection(frame_time, REASON_LEFT_BEFORE_SECOND_HAND)
             self._reset_to_idle()
             return
 
@@ -246,6 +304,7 @@ class TwoHandsStateMachine(_BaseStateMachine):
 
         if frame_time - self._waiting_start >= self._dwell_time:
             # Segunda mão não chegou dentro do tempo de dwell — desbloqueia
+            self._record_rejection(frame_time, REASON_SECOND_HAND_TIMEOUT)
             self._reset_to_idle()
             return
 
@@ -261,6 +320,7 @@ class TwoHandsStateMachine(_BaseStateMachine):
         hands = self._hands_in_tracked_zone(classified_hands)
 
         if len(hands) < 2:
+            self._record_rejection(frame_time, REASON_LEFT_BEFORE_VALIDATION_TIME)
             self._reset_to_idle()
             return
 
@@ -278,8 +338,17 @@ class TwoHandsStateMachine(_BaseStateMachine):
     ) -> TaskEvent | None:
         if frame_time - self._task_start >= self._task_timeout:
             return self._complete_task(frame_time, was_forced=True)
-        if len(self._hands_in_tracked_zone(classified_hands)) < 2:
+
+        if len(self._hands_in_tracked_zone(classified_hands)) >= 2:
+            self._missing_since = None
+            return None
+
+        if self._missing_since is None:
+            self._missing_since = frame_time
+
+        if frame_time - self._missing_since >= self._missing_tolerance:
             return self._complete_task(frame_time, was_forced=False)
+
         return None
 
     def _hands_in_tracked_zone(
@@ -297,6 +366,8 @@ class TwoHandsStateMachine(_BaseStateMachine):
         self._prev_detections = {}
         self._waiting_start   = None
         self._dwell_start     = None
+        self._candidate_start = None
+        self._missing_since   = None
         self._task_start      = None
 
 
@@ -324,19 +395,27 @@ class TaskStateMachine:
         self._two_hands       = two_hands
         self._two_hands_zones = set(two_hands_zones)
         self._active:         StateMachineInterface | None = None
+        self._diagnostics:    list[TaskDiagnostic] = []
 
     def update(
         self,
         classified_hands: list[ClassifiedHand],
         frame_time: datetime,
     ) -> TaskEvent | None:
+        """Envia o frame para a máquina ativa ou escolhe a melhor máquina."""
         if self._active is not None:
             event = self._active.update(classified_hands, frame_time)
+            self._diagnostics.extend(self._active.pop_diagnostics())
             if self._active.state() == TaskState.IDLE:
                 self._active = None
             return event
 
         return self._activate_best_zone(classified_hands, frame_time)
+
+    def pop_diagnostics(self) -> list[TaskDiagnostic]:
+        """Devolve e limpa diagnósticos vindos das máquinas internas."""
+        diagnostics, self._diagnostics = self._diagnostics, []
+        return diagnostics
 
     def _activate_best_zone(
         self,
@@ -354,7 +433,9 @@ class TaskStateMachine:
             machine = self._machine_for_zone(zone_name, count)
             if machine is not None:
                 self._active = machine
-                return self._active.update(classified_hands, frame_time)
+                event = self._active.update(classified_hands, frame_time)
+                self._diagnostics.extend(self._active.pop_diagnostics())
+                return event
 
         # Zona de uma mão: filtra zonas two-hands para que _handle_idle não as possa
         # seleccionar acidentalmente como zona rastreada (ex: mão em repouso em Montagem
@@ -366,7 +447,9 @@ class TaskStateMachine:
         for _, zone in filtered:
             if zone is not None:
                 self._active = self._one_hand
-                return self._active.update(filtered, frame_time)
+                event = self._active.update(filtered, frame_time)
+                self._diagnostics.extend(self._active.pop_diagnostics())
+                return event
 
         return None
 
@@ -383,6 +466,7 @@ class TaskStateMachine:
         return None
 
     def current_state(self) -> TaskState:
+        """Estado externo visível do orquestrador."""
         if self._active is None:
             return TaskState.IDLE
         return self._active.state()

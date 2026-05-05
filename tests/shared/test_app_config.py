@@ -30,6 +30,7 @@ def _config():
             "stillness_threshold_px": 5.0,
             "zones": ["Porca", "Montagem", "Saida"],
             "two_hands_zones": ["Montagem"],
+            "two_hands_missing_tolerance_seconds": 0.3,
             "cycle_zone_order": ["Porca", "Montagem", "Saida"],
             "exit_zone": "Saida",
             "detection_gap_threshold_s": 1.0,
@@ -62,6 +63,14 @@ def test_validate_config_rejects_missing_section():
 def test_validate_config_rejects_wrong_type():
     config = _config()
     config["tracking"]["zones"] = "Porca"
+
+    with pytest.raises(ValueError):
+        validate_config(config)
+
+
+def test_validate_config_requires_two_hands_missing_tolerance():
+    config = _config()
+    del config["tracking"]["two_hands_missing_tolerance_seconds"]
 
     with pytest.raises(ValueError):
         validate_config(config)

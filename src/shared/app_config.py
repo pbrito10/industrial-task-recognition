@@ -31,6 +31,7 @@ class TrackingConfig(TypedDict):
     stillness_threshold_px: float
     zones: list[str]
     two_hands_zones: list[str]
+    two_hands_missing_tolerance_seconds: float
     cycle_zone_order: list[str]
     exit_zone: str
     detection_gap_threshold_s: float
@@ -94,6 +95,7 @@ def validate_config(raw: Any) -> AppConfig:
     _require_number(tracking, "stillness_threshold_px")
     _require_list(tracking, "zones", str)
     _require_list(tracking, "two_hands_zones", str)
+    _require_number(tracking, "two_hands_missing_tolerance_seconds")
     _require_list(tracking, "cycle_zone_order", str)
     _require_type(tracking, "exit_zone", str)
     _require_number(tracking, "detection_gap_threshold_s")

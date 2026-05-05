@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from src.tracking.cycle_result import CycleResult
 from src.tracking.order_matching import matches_order
 from src.tracking.task_event import TaskEvent
@@ -13,9 +15,11 @@ class CycleTracker:
     Isto evita ciclos falsos no arranque e impede que ir direto à Saída feche
     um ciclo sem ter feito nenhum trabalho.
 
-    Um ciclo só fecha quando a zona de saída é concluída normalmente
+    Um ciclo fecha quando a zona de saída é concluída normalmente
     (was_forced=False). Timeouts acumulam-se no ciclo mas não o fecham —
-    uma interrupção não é uma saída real.
+    uma interrupção não é uma saída real. Se a saída falhar e, depois de já
+    haver progresso no ciclo, a primeira zona esperada aparecer novamente, o
+    ciclo anterior é fechado como incompleto e essa nova tarefa inicia outro.
 
     Tarefas was_forced=True também são excluídas da validação de ordem,
     porque representam tempo de espera, não passos de montagem.
@@ -29,14 +33,25 @@ class CycleTracker:
         # Sem ordem definida o ciclo abre imediatamente; caso contrário aguarda
         # a primeira zona (expected_order[0]) para garantir arranque correto.
         self._cycle_open:       bool             = not bool(expected_order)
+        self._last_event_started_new_cycle: bool = False
 
     def record(self, event: TaskEvent) -> CycleResult | None:
         """Acumula o evento. Devolve CycleResult se o ciclo ficou completo."""
+        self._last_event_started_new_cycle = False
+
         if not self._cycle_open:
             # Só abre na primeira zona esperada (e nunca em eventos forçados)
             if event.was_forced or event.zone_name != self._expected_order[0]:
                 return None
             self._cycle_open = True
+        elif self._starts_next_cycle(event):
+            previous_cycle = self._try_close_cycle()
+            self._cycle_open = True
+            self._last_event_started_new_cycle = True
+            self._tasks_in_cycle.append(
+                replace(event, cycle_number=self.current_cycle_number())
+            )
+            return previous_cycle
 
         self._tasks_in_cycle.append(event)
 
@@ -54,8 +69,29 @@ class CycleTracker:
         """
         return self._completed_cycles + 1
 
+    def last_event_started_new_cycle(self) -> bool:
+        """True quando o último evento fechou um ciclo incompleto e abriu outro."""
+        return self._last_event_started_new_cycle
+
     def _is_cycle_complete(self, event: TaskEvent) -> bool:
         return event.zone_name == self._exit_zone and not event.was_forced
+
+    def _starts_next_cycle(self, event: TaskEvent) -> bool:
+        """Deteta novo arranque quando a saída anterior não fechou o ciclo."""
+        return (
+            bool(self._expected_order)
+            and not event.was_forced
+            and event.zone_name == self._expected_order[0]
+            and self._has_progress_beyond_start_zone()
+        )
+
+    def _has_progress_beyond_start_zone(self) -> bool:
+        start_zone = self._expected_order[0]
+        return any(
+            task.zone_name != start_zone
+            for task in self._tasks_in_cycle
+            if not task.was_forced
+        )
 
     def _try_close_cycle(self) -> CycleResult:
         """Fecha o ciclo e regista se a sequência respeitou a ordem esperada."""

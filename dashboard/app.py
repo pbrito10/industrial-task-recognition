@@ -2,6 +2,8 @@ import json
 import time
 from pathlib import Path
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 import yaml
 
@@ -35,6 +37,15 @@ def _fmt_seconds(s: float) -> str:
     if s >= 60:
         return f"{int(s // 60)}m {int(s % 60):02d}s"
     return f"{s:.1f}s"
+
+
+def _duration_domain(values: list[float]) -> list[float]:
+    """Define uma escala Y próxima dos valores para evidenciar variações pequenas."""
+    minimum = min(values)
+    maximum = max(values)
+    span = maximum - minimum
+    padding = max(1.0, span * 0.2)
+    return [max(0.0, minimum - padding), maximum + padding]
 
 
 # ── Secções do dashboard ──────────────────────────────────────────────────────
@@ -76,8 +87,47 @@ def _render_time_breakdown(data: dict) -> None:
     c3.metric("Interrupções", f"{bd['interruption_pct']:.1f} %")
 
 
+def _render_cycle_trend(data: dict) -> None:
+    """Gráfico com a duração dos últimos ciclos completos."""
+    st.subheader("Últimos 10 Ciclos")
+
+    recent_cycles = data.get("cycle_metrics", {}).get("recent_cycles", [])
+    if not recent_cycles:
+        st.info("Ainda não há ciclos completos para mostrar.")
+        return
+
+    chart_data = pd.DataFrame({
+        "Ciclo": [cycle["cycle"] for cycle in recent_cycles],
+        "Duração (s)": [cycle["duration_s"] for cycle in recent_cycles],
+    })
+    duration_domain = _duration_domain(chart_data["Duração (s)"].tolist())
+
+    chart = (
+        alt.Chart(chart_data)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("Ciclo:O", title="Ciclo"),
+            y=alt.Y(
+                "Duração (s):Q",
+                title="Duração (s)",
+                scale=alt.Scale(domain=duration_domain, nice=False, zero=False),
+                axis=alt.Axis(tickMinStep=1),
+            ),
+            tooltip=[
+                alt.Tooltip("Ciclo:O", title="Ciclo"),
+                alt.Tooltip("Duração (s):Q", title="Duração", format=".1f"),
+            ],
+        )
+        .properties(height=280)
+    )
+
+    st.altair_chart(chart, use_container_width=True)
+
+
 def _render(data: dict) -> None:
     _render_summary(data)
+    st.divider()
+    _render_cycle_trend(data)
     st.divider()
     _render_time_breakdown(data)
 
@@ -88,6 +138,7 @@ def _render(data: dict) -> None:
 # ── Entrada ───────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    """Inicializa a app Streamlit e atualiza o dashboard em loop."""
     st.set_page_config(
         page_title="Monitor Industrial",
         layout="wide",

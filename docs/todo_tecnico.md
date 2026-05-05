@@ -165,16 +165,15 @@ Também convém decidir como representar estas presenças no Excel: uma única c
 - `config/settings.yaml`
 - `src/tracking/order_matching.py`
 - `src/tracking/cycle_tracker.py`
-- `analysis/session_analysis.py`
 - `src/output/excel_exporter.py`
-- testes em `tests/tracking/`, `tests/analysis/` e `tests/output/`
+- testes em `tests/tracking/` e `tests/output/`
 
 ### Direção de solução
 
 - Evoluir `tracking.cycle_zone_order` para suportar etapas com cardinalidade, por exemplo `min_occurrences` e `max_occurrences`.
 - Remover o hardcode da zona `Rodas` quando a regra estiver em configuração.
 - Definir a visualização/exportação das ocorrências variáveis no relatório.
-- Garantir que a análise histórica continua a usar o snapshot de configuração da sessão.
+- Garantir que os relatórios continuam a refletir a configuração usada em cada sessão.
 
 ### Critérios de conclusão
 
@@ -183,3 +182,48 @@ Também convém decidir como representar estas presenças no Excel: uma única c
 - Ciclos com 0 presenças em `Rodas` continuam a ser marcados como incompletos.
 - Ciclos com mais de 4 presenças em `Rodas` são marcados como `Fora de ordem` ou outra classificação decidida explicitamente.
 - Há testes que cobrem os limites 0, 1, 4 e 5 presenças.
+
+## 4. Uniformizar a média de ciclo entre Dashboard e Excel
+
+### Problema
+
+O dashboard mostra `Tempo médio de ciclo` com base apenas nos ciclos em ordem,
+enquanto o Excel apresenta a média de todos os ciclos fechados. Ambas as leituras
+são defensáveis, mas o mesmo nome para métricas diferentes pode confundir uma
+apresentação ou validação.
+
+### Ficheiros envolvidos
+
+- `src/output/dashboard_writer.py`
+- `src/output/excel_exporter.py`
+- `dashboard/app.py`
+- testes em `tests/output/`
+
+### Critérios de conclusão
+
+- Dashboard e Excel usam a mesma definição; ou
+- os labels ficam explícitos, por exemplo `Tempo médio dos ciclos em ordem` e
+  `Tempo médio de todos os ciclos`.
+
+## 5. Reduzir acoplamento do orquestrador de sessão
+
+### Problema
+
+`monitor_process.py` ainda constrói e coordena muitos componentes diretamente:
+state machine, cycle tracker, métricas, CSV, Excel, dashboard, vídeo e display.
+Isto funciona, mas torna futuras alterações mais propensas a mexer no mesmo
+ficheiro central.
+
+### Direção de solução
+
+- Introduzir um objeto agregador de outputs ou `OutputBus`.
+- Fazer `CycleTracker.record()` devolver um resultado explícito com ciclos
+  fechados e evento ajustado, em vez de usar estado lateral como
+  `last_event_started_new_cycle()`.
+- Manter `monitor_process.py` focado em loop de frames e delegar efeitos.
+
+### Critérios de conclusão
+
+- Adicionar um novo output não exige alterar a lógica de processamento de frame.
+- O fecho automático de ciclo anterior fica representado por um objeto de retorno
+  explícito e testável.

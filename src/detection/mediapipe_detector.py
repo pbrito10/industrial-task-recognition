@@ -187,4 +187,5 @@ class MediapipeDetector(DetectorInterface):
         )
 
     def release(self) -> None:
+        """Liberta o HandLandmarker carregado pelo MediaPipe."""
         self._landmarker.close()

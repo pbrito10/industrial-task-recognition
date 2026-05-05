@@ -19,6 +19,7 @@ def _config() -> dict:
             "dwell_time_seconds": 0.5,
             "task_timeout_seconds": 30.0,
             "stillness_threshold_px": 5.0,
+            "two_hands_missing_tolerance_seconds": 0.3,
             "detection_gap_threshold_s": 1.0,
         }
     }

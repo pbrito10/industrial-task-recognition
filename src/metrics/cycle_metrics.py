@@ -39,6 +39,12 @@ class CycleMetrics(_DurationMetrics):
         total = sum((d.total_seconds() for d in self._correct_durations), 0.0)
         return timedelta(seconds=total / len(self._correct_durations))
 
+    def recent_durations(self, limit: int = 10) -> list[timedelta]:
+        """Durações dos últimos `limit` ciclos completos, em ordem cronológica."""
+        if limit <= 0:
+            return []
+        return list(self._durations[-limit:])
+
     def count_in_order(self) -> int:
         """Ciclos com sequência completa e em ordem."""
         return self._in_order_count

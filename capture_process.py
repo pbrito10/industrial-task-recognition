@@ -9,6 +9,7 @@
 
 
 def run(frame_queue, stop_event, config):
+    """Processo de captura: lê a câmara e publica frames RGB recentes."""
     import os
     import queue
     import cv2

@@ -11,6 +11,7 @@ _WINDOW_NAME = "Monitor  |  q para sair"
 
 
 def run(detection_queue, stop_event, config, roi_path):
+    """Entrada do processo de monitorização completo."""
     _MonitorSession(config, roi_path).execute(detection_queue, stop_event)
 
 
@@ -203,6 +204,9 @@ class _MonitorSession:
 
         dwell_time   = timedelta(seconds=config["tracking"]["dwell_time_seconds"])
         task_timeout = timedelta(seconds=config["tracking"]["task_timeout_seconds"])
+        two_hands_missing_tolerance = timedelta(
+            seconds=config["tracking"]["two_hands_missing_tolerance_seconds"]
+        )
         strategy     = StillnessDwellStrategy(config["tracking"]["stillness_threshold_px"])
 
         self._cycle_tracker    = CycleTracker(
@@ -226,9 +230,14 @@ class _MonitorSession:
             fps=config["output"]["video_fps"],
             enabled=config["output"]["record_video"],
         )
-        self._state_machine    = self._build_state_machine(dwell_time, task_timeout, strategy)
+        self._state_machine    = self._build_state_machine(
+            dwell_time,
+            task_timeout,
+            two_hands_missing_tolerance,
+            strategy,
+        )
 
-    def _build_state_machine(self, dwell_time, task_timeout, strategy):
+    def _build_state_machine(self, dwell_time, task_timeout, two_hands_missing_tolerance, strategy):
         """Monta as duas máquinas de estado e o orquestrador TaskStateMachine.
 
         Separado do __init__ para isolar a lógica de construção — os imports
@@ -238,10 +247,17 @@ class _MonitorSession:
             OneHandStateMachine, TaskStateMachine, TwoHandsStateMachine,
         )
         one_hand  = OneHandStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
-        two_hands = TwoHandsStateMachine(dwell_time, task_timeout, self._cycle_tracker.current_cycle_number, strategy)
+        two_hands = TwoHandsStateMachine(
+            dwell_time,
+            task_timeout,
+            self._cycle_tracker.current_cycle_number,
+            strategy,
+            missing_tolerance=two_hands_missing_tolerance,
+        )
         return TaskStateMachine(one_hand, two_hands, self._config["tracking"]["two_hands_zones"])
 
     def execute(self, detection_queue, stop_event) -> None:
+        """Abre o DebugLogger, grava snapshot de config e entra no loop principal."""
         from src.events.debug_logger import DebugLogger
         from src.output.session_config_snapshot import write_session_config_snapshot
 
@@ -283,6 +299,7 @@ class _MonitorSession:
         self._transition_tracker.track(classified_hands, now, self._frame_idx, debug_logger)
 
         task_event = self._state_machine.update(classified_hands, now)
+        self._log_task_diagnostics(debug_logger)
         if task_event is not None:
             self._handle_task_event(task_event, debug_logger)
 
@@ -312,22 +329,41 @@ class _MonitorSession:
         cv2.imshow(_WINDOW_NAME, frame_bgr)
 
     def _handle_task_event(self, task_event, debug_logger) -> None:
-        self._log_task(task_event, debug_logger)
-
         cycle_result = self._cycle_tracker.record(task_event)
+        if self._cycle_tracker.last_event_started_new_cycle():
+            self._record_cycle_result(cycle_result, debug_logger)
+            cycle_result = None
+            task_event = self._event_in_current_cycle(task_event)
+
+        self._log_task(task_event, debug_logger)
         self._metrics.record(task_event)
         self._excel_exporter.add_event(task_event)
 
         if cycle_result is not None:
-            self._metrics.record_cycle(cycle_result)
-            self._excel_exporter.add_cycle_result(cycle_result)
-            debug_logger.log_cycle_complete(cycle_result)
+            self._record_cycle_result(cycle_result, debug_logger)
+
+    def _event_in_current_cycle(self, task_event):
+        from dataclasses import replace
+
+        return replace(task_event, cycle_number=self._cycle_tracker.current_cycle_number())
+
+    def _record_cycle_result(self, cycle_result, debug_logger) -> None:
+        if cycle_result is None:
+            return
+
+        self._metrics.record_cycle(cycle_result)
+        self._excel_exporter.add_cycle_result(cycle_result)
+        debug_logger.log_cycle_complete(cycle_result)
 
     def _log_task(self, task_event, debug_logger) -> None:
         if task_event.was_forced:
             debug_logger.log_task_timeout(task_event)
             return
         debug_logger.log_task_complete(task_event)
+
+    def _log_task_diagnostics(self, debug_logger) -> None:
+        for diagnostic in self._state_machine.pop_diagnostics():
+            debug_logger.log_task_rejected(diagnostic)
 
     def _maybe_refresh_dashboard(self, now) -> None:
         if now - self._last_dashboard_write >= self._refresh_interval:

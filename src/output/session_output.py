@@ -19,31 +19,38 @@ class SessionOutputLayout:
 
     @property
     def frames_dir(self) -> Path:
+        """Pasta de frames auxiliares da sessão."""
         return self.session_dir / "frames"
 
     @property
     def gap_frames_dir(self) -> Path:
+        """Pasta onde ficam os frames associados a gaps de deteção."""
         return self.frames_dir / "gaps"
 
     @property
     def video_dir(self) -> Path:
+        """Pasta onde fica o vídeo anotado da sessão."""
         return self.session_dir / "video"
 
     @property
     def video_path(self) -> Path:
+        """Caminho final do ficheiro MP4 anotado."""
         stamp = self.session_start.strftime("%Y-%m-%d_%Hh%M")
         return self.video_dir / f"sessao_{stamp}_annotated.mp4"
 
     def ensure_subdirs(self) -> None:
+        """Cria as subpastas necessárias dentro da pasta da sessão."""
         self.gap_frames_dir.mkdir(parents=True, exist_ok=True)
         self.video_dir.mkdir(parents=True, exist_ok=True)
 
 
 def output_root_from_config(config: dict[str, Any]) -> Path:
+    """Pasta raiz de outputs configurada em settings.yaml."""
     return Path(config["output"]["excel_output_dir"])
 
 
 def sessions_dir_from_config(config: dict[str, Any]) -> Path:
+    """Pasta onde são agrupadas as sessões."""
     subdir = config["output"].get("sessions_subdir", _DEFAULT_SESSIONS_SUBDIR)
     return output_root_from_config(config) / subdir
 
@@ -52,6 +59,7 @@ def create_session_output_layout(
     config: dict[str, Any],
     session_start: datetime,
 ) -> SessionOutputLayout:
+    """Cria uma pasta única para a sessão e devolve todos os caminhos relevantes."""
     root_dir     = output_root_from_config(config)
     sessions_dir = sessions_dir_from_config(config)
     base_name    = session_start.strftime("%Y-%m-%d_%Hh%Mm%Ss")
@@ -80,6 +88,7 @@ def debug_csv_paths(config: dict[str, Any]) -> list[Path]:
 
 
 def relative_to_output_root(path: Path, config: dict[str, Any]) -> str:
+    """Formata um caminho relativo à raiz de output quando possível."""
     root_dir = output_root_from_config(config)
     try:
         return str(path.relative_to(root_dir))

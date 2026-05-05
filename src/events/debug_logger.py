@@ -8,6 +8,7 @@ from types import TracebackType
 from src.detection.hand_detection import HandDetection
 from src.shared.event_type import EventType
 from src.tracking.cycle_result import CycleResult
+from src.tracking.task_diagnostic import TaskDiagnostic
 from src.tracking.task_event import TaskEvent
 
 _COLUMNS = [
@@ -25,6 +26,7 @@ _COLUMNS = [
     "sequence_in_order",
     "actual_sequence",
     "is_anomaly",
+    "reason",
 ]
 
 
@@ -60,6 +62,7 @@ class DebugLogger:
         detection:     HandDetection,
         frame_idx:     int,
     ) -> None:
+        """Regista entrada de uma mão numa zona."""
         self._write_zone_row(EventType.ZONE_ENTER, timestamp, relative_time, zone_name, detection, frame_idx)
 
     def log_zone_exit(
@@ -70,13 +73,31 @@ class DebugLogger:
         detection:     HandDetection,
         frame_idx:     int,
     ) -> None:
+        """Regista saída de uma mão de uma zona."""
         self._write_zone_row(EventType.ZONE_EXIT, timestamp, relative_time, zone_name, detection, frame_idx)
 
     def log_task_complete(self, task_event: TaskEvent) -> None:
+        """Regista uma tarefa concluída normalmente."""
         self._write_task_row(EventType.TASK_COMPLETE, task_event)
 
     def log_task_timeout(self, task_event: TaskEvent) -> None:
+        """Regista uma tarefa fechada por timeout."""
         self._write_task_row(EventType.TASK_TIMEOUT, task_event)
+
+    def log_task_rejected(self, diagnostic: TaskDiagnostic) -> None:
+        """Regista uma tentativa de tarefa abandonada antes de confirmar dwell."""
+        relative = diagnostic.timestamp - self._session_start
+        row      = self._empty_row()
+        row.update({
+            "timestamp_iso":   diagnostic.timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3],
+            "relative_time_s": round(relative.total_seconds(), 3),
+            "event_type":      EventType.TASK_REJECTED.value,
+            "zone":            diagnostic.zone_name,
+            "duration_s":      round(diagnostic.duration.total_seconds(), 3),
+            "cycle_number":    diagnostic.cycle_number,
+            "reason":          diagnostic.reason,
+        })
+        self._write(row)
 
     def log_detection_gap(
         self,
@@ -167,9 +188,11 @@ class DebugLogger:
         self._file.flush()
 
     def close(self) -> None:
+        """Fecha o ficheiro CSV."""
         self._file.close()
 
     def __enter__(self) -> DebugLogger:
+        """Permite usar DebugLogger como context manager."""
         return self
 
     def __exit__(
@@ -178,4 +201,5 @@ class DebugLogger:
         exc_val:  BaseException | None,
         exc_tb:   TracebackType | None,
     ) -> None:
+        """Fecha o ficheiro ao sair do context manager."""
         self.close()

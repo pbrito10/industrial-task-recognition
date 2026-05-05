@@ -24,12 +24,14 @@ class RegionOfInterest:
     bottom_right: Point
 
     def contains(self, point: Point) -> bool:
+        """True se o ponto está dentro da ROI, incluindo as bordas."""
         return (
             self.top_left.x <= point.x <= self.bottom_right.x
             and self.top_left.y <= point.y <= self.bottom_right.y
         )
 
     def to_dict(self) -> dict:
+        """Serializa a ROI para o formato usado em config/rois.json."""
         return {
             _KEY_NAME: self.name,
             _KEY_X1:   self.top_left.x,
@@ -40,6 +42,7 @@ class RegionOfInterest:
 
     @classmethod
     def from_dict(cls, data: dict) -> RegionOfInterest:
+        """Reconstrói uma ROI a partir do formato guardado em JSON."""
         return cls(
             name=data[_KEY_NAME],
             top_left=Point(x=data[_KEY_X1], y=data[_KEY_Y1]),

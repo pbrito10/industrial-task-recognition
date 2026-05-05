@@ -63,4 +63,5 @@ class KeypointCollection:
         return self._keypoints[index]
 
     def all(self) -> list[Keypoint]:
+        """Devolve uma cópia da lista de keypoints para impedir mutação externa."""
         return list(self._keypoints)

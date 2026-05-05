@@ -106,6 +106,26 @@ def test_cycle_metrics_with_data(tmp_path):
     assert cm_data["count_probably_complete"] == 1
     assert "min_s" in cm_data
     assert "avg_s" in cm_data
+    assert cm_data["recent_cycles"] == [
+        {"cycle": 1, "duration_s": 60.0},
+        {"cycle": 2, "duration_s": 80.0},
+    ]
+
+
+def test_cycle_metrics_recent_cycles_limited_to_ten(tmp_path):
+    path = tmp_path / "metrics.json"
+    writer = DashboardWriter(path)
+    cm = CycleMetrics()
+    for seconds in range(1, 13):
+        cm.add(timedelta(seconds=seconds), sequence_in_order=True)
+
+    writer.write(_snapshot(cycle_metrics=cm))
+
+    data = json.loads(path.read_text())
+    recent = data["cycle_metrics"]["recent_cycles"]
+    assert len(recent) == 10
+    assert recent[0] == {"cycle": 3, "duration_s": 3.0}
+    assert recent[-1] == {"cycle": 12, "duration_s": 12.0}
 
 
 def test_bottleneck_zone_in_output(tmp_path):

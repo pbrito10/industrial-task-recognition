@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 class CycleResult:
     """Resultado de um ciclo completo de montagem.
 
-    Produzido pelo CycleTracker quando a zona de saída é confirmada.
-    Transporta timestamps, duração, número do ciclo, se a sequência foi
-    respeitada e as zonas visitadas — útil para debug, métricas e exportação.
+    Produzido pelo CycleTracker quando a zona de saída é confirmada ou quando
+    um novo arranque obriga a fechar o ciclo anterior como incompleto. Transporta
+    timestamps, duração, número do ciclo, se a sequência foi respeitada e as
+    zonas visitadas — útil para debug, métricas e exportação.
     """
 
     start_time:         datetime

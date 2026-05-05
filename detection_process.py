@@ -12,6 +12,7 @@
 
 
 def run(frame_queue, detection_queue, stop_event, config):
+    """Processo de deteção: transforma frames RGB em HandDetection."""
     import queue
 
     from src.detection.detector_interface import DetectorInterface

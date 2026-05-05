@@ -21,6 +21,7 @@ class TaskMetricSnapshot:
 
     @classmethod
     def from_metrics(cls, metrics: TaskMetrics) -> TaskMetricSnapshot:
+        """Cria snapshot imutável a partir das métricas vivas de uma zona."""
         if metrics.count() == 0:
             return cls(_count=0)
         return cls(
@@ -32,24 +33,29 @@ class TaskMetricSnapshot:
         )
 
     def count(self) -> int:
+        """Número de tarefas registadas nesta zona."""
         return self._count
 
     def minimum(self) -> timedelta:
+        """Menor duração registada; exige pelo menos uma ocorrência."""
         if self._minimum is None:
             raise ValueError("Sem durações registadas.")
         return self._minimum
 
     def average(self) -> timedelta:
+        """Duração média; exige pelo menos uma ocorrência."""
         if self._average is None:
             raise ValueError("Sem durações registadas.")
         return self._average
 
     def maximum(self) -> timedelta:
+        """Maior duração registada; exige pelo menos uma ocorrência."""
         if self._maximum is None:
             raise ValueError("Sem durações registadas.")
         return self._maximum
 
     def std_deviation(self) -> timedelta:
+        """Desvio padrão das durações, ou zero com menos de duas ocorrências."""
         return self._std_deviation
 
 
@@ -67,9 +73,11 @@ class CycleMetricSnapshot:
     _count_to_review: int = 0
     _count_probably_complete: int = 0
     _count_anomalies: int = 0
+    _recent_durations: tuple[timedelta, ...] = ()
 
     @classmethod
     def from_metrics(cls, metrics: CycleMetrics) -> CycleMetricSnapshot:
+        """Cria snapshot imutável a partir das métricas vivas de ciclos."""
         if metrics.count() == 0:
             return cls(_count=0)
         return cls(
@@ -83,43 +91,58 @@ class CycleMetricSnapshot:
             _count_to_review=metrics.count_to_review(),
             _count_probably_complete=metrics.count_probably_complete(),
             _count_anomalies=metrics.count_anomalies(),
+            _recent_durations=tuple(metrics.recent_durations()),
         )
 
     def count(self) -> int:
+        """Número de ciclos fechados."""
         return self._count
 
     def minimum(self) -> timedelta:
+        """Menor duração de ciclo; exige pelo menos um ciclo."""
         if self._minimum is None:
             raise ValueError("Sem ciclos registados.")
         return self._minimum
 
     def average(self) -> timedelta:
+        """Duração média de todos os ciclos; exige pelo menos um ciclo."""
         if self._average is None:
             raise ValueError("Sem ciclos registados.")
         return self._average
 
     def maximum(self) -> timedelta:
+        """Maior duração de ciclo; exige pelo menos um ciclo."""
         if self._maximum is None:
             raise ValueError("Sem ciclos registados.")
         return self._maximum
 
     def std_deviation(self) -> timedelta:
+        """Desvio padrão das durações de ciclo."""
         return self._std_deviation
 
     def correct_average(self) -> timedelta | None:
+        """Média apenas dos ciclos com sequência em ordem."""
         return self._correct_average
 
     def count_in_order(self) -> int:
+        """Número de ciclos classificados automaticamente como em ordem."""
         return self._count_in_order
 
     def count_to_review(self) -> int:
+        """Número de ciclos que precisam de validação manual."""
         return self._count_to_review
 
     def count_probably_complete(self) -> int:
+        """Contador antigo de ciclos fora de ordem, preservado por compatibilidade."""
         return self._count_probably_complete
 
     def count_anomalies(self) -> int:
+        """Contador antigo de anomalias, preservado por compatibilidade."""
         return self._count_anomalies
+
+    def recent_durations(self) -> tuple[timedelta, ...]:
+        """Durações dos últimos ciclos usados pelo gráfico do dashboard."""
+        return self._recent_durations
 
 
 @dataclass(frozen=True)

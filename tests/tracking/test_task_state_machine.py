@@ -13,6 +13,11 @@ from tests.conftest import make_hand, make_roi
 from src.shared.hand_side import HandSide
 from src.shared.task_state import TaskState
 from src.tracking.activation_strategy import TimeDwellStrategy
+from src.tracking.task_diagnostic import (
+    REASON_LEFT_BEFORE_STILLNESS,
+    REASON_LEFT_BEFORE_VALIDATION_TIME,
+    REASON_SECOND_HAND_TIMEOUT,
+)
 from src.tracking.task_state_machine import (
     OneHandStateMachine,
     TwoHandsStateMachine,
@@ -33,12 +38,13 @@ def _make_one_hand_machine():
     )
 
 
-def _make_two_hands_machine():
+def _make_two_hands_machine(missing_tolerance: timedelta = timedelta(0)):
     return TwoHandsStateMachine(
         dwell_time=_DWELL,
         task_timeout=_TIMEOUT,
         cycle_number_fn=lambda: 1,
         strategy=TimeDwellStrategy(),
+        missing_tolerance=missing_tolerance,
     )
 
 
@@ -88,6 +94,20 @@ class TestOneHandStateMachine:
         m.update(_no_hand(), _T0 + timedelta(seconds=0.1))                 # saiu cedo → IDLE
         assert m.state() == TaskState.IDLE
 
+    def test_exits_during_dwell_records_diagnostic(self):
+        m = _make_one_hand_machine()
+        hand = make_hand(mcp=(50, 50))
+
+        m.update(_classified(hand, "Porca"), _T0)
+        m.update(_classified(hand, "Porca"), _T0 + timedelta(seconds=0.1))
+        m.update(_no_hand(), _T0 + timedelta(seconds=0.3))
+
+        diagnostics = m.pop_diagnostics()
+        assert len(diagnostics) == 1
+        assert diagnostics[0].zone_name == "Porca"
+        assert diagnostics[0].reason == REASON_LEFT_BEFORE_VALIDATION_TIME
+        assert diagnostics[0].duration == timedelta(seconds=0.3)
+
     def test_timeout_produces_forced_event(self):
         m = _make_one_hand_machine()
         hand = make_hand(mcp=(50, 50))
@@ -114,7 +134,7 @@ class TestOneHandStateMachine:
             strategy=StillnessDwellStrategy(velocity_threshold_px_per_frame=5.0),
         )
         hand_still  = make_hand(wrist=(50, 50), mcp=(50, 50))
-        hand_moving = make_hand(wrist=(70, 50), mcp=(50, 50))  # pulso moveu 20px
+        hand_moving = make_hand(wrist=(50, 50), mcp=(70, 50))  # MCP moveu 20px
 
         m.update(_classified(hand_still, "Porca"), _T0)                        # IDLE → DWELLING (prev=None)
         m.update(_classified(hand_still, "Porca"), _T0 + timedelta(seconds=0.1))   # is_active(still,None)=False
@@ -130,6 +150,27 @@ class TestOneHandStateMachine:
         # Agora o elapsed atinge o dwell_time
         m.update(_classified(hand_still, "Porca"), _T0 + timedelta(seconds=1.0))   # elapsed=0.6s >= 0.5s
         assert m.state() == TaskState.TASK_IN_PROGRESS
+
+    def test_moving_hand_then_exit_records_stillness_diagnostic(self):
+        from src.tracking.activation_strategy import StillnessDwellStrategy
+        m = OneHandStateMachine(
+            dwell_time=_DWELL,
+            task_timeout=_TIMEOUT,
+            cycle_number_fn=lambda: 1,
+            strategy=StillnessDwellStrategy(velocity_threshold_px_per_frame=5.0),
+        )
+        hand_still  = make_hand(mcp=(50, 50))
+        hand_moving = make_hand(mcp=(70, 50))
+
+        m.update(_classified(hand_still, "Saida"), _T0)
+        m.update(_classified(hand_still, "Saida"), _T0 + timedelta(seconds=0.1))
+        m.update(_classified(hand_moving, "Saida"), _T0 + timedelta(seconds=0.2))
+        m.update(_no_hand(), _T0 + timedelta(seconds=0.3))
+
+        diagnostics = m.pop_diagnostics()
+        assert len(diagnostics) == 1
+        assert diagnostics[0].zone_name == "Saida"
+        assert diagnostics[0].reason == REASON_LEFT_BEFORE_STILLNESS
 
 
 # --- TwoHandsStateMachine ---
@@ -169,6 +210,20 @@ class TestTwoHandsStateMachine:
         m.update([(hand, roi)], _T0 + timedelta(seconds=0.7))
         assert m.state() == TaskState.IDLE
 
+    def test_waiting_timeout_records_diagnostic(self):
+        m = _make_two_hands_machine()
+        hand = make_hand(mcp=(50, 50))
+        roi = make_roi("Montagem", 0, 0, 200, 200)
+
+        m.update([(hand, roi)], _T0)
+        m.update([(hand, roi)], _T0 + timedelta(seconds=0.1))
+        m.update([(hand, roi)], _T0 + timedelta(seconds=0.7))
+
+        diagnostics = m.pop_diagnostics()
+        assert len(diagnostics) == 1
+        assert diagnostics[0].zone_name == "Montagem"
+        assert diagnostics[0].reason == REASON_SECOND_HAND_TIMEOUT
+
     def test_full_two_hands_cycle_produces_event(self):
         m = _make_two_hands_machine()
         h1 = make_hand(mcp=(50, 50), side=HandSide.RIGHT)
@@ -186,6 +241,59 @@ class TestTwoHandsStateMachine:
         assert event.was_forced is False
         assert event.start_time == _T0 + timedelta(seconds=0.2)
         assert event.duration == timedelta(seconds=0.8)
+
+    def test_two_hands_missing_tolerance_prevents_short_split(self):
+        tolerance = timedelta(seconds=0.3)
+        m = _make_two_hands_machine(missing_tolerance=tolerance)
+        h1 = make_hand(mcp=(50, 50), side=HandSide.RIGHT)
+        h2 = make_hand(mcp=(50, 50), side=HandSide.LEFT)
+        roi = make_roi("Montagem", 0, 0, 200, 200)
+
+        m.update([(h1, roi)], _T0)
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.1))
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.2))
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.8))
+
+        assert m.update([(h1, roi)], _T0 + timedelta(seconds=0.9)) is None
+        assert m.state() == TaskState.TASK_IN_PROGRESS
+
+        assert m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=1.0)) is None
+        assert m.state() == TaskState.TASK_IN_PROGRESS
+
+    def test_two_hands_missing_tolerance_closes_after_limit(self):
+        tolerance = timedelta(seconds=0.3)
+        m = _make_two_hands_machine(missing_tolerance=tolerance)
+        h1 = make_hand(mcp=(50, 50), side=HandSide.RIGHT)
+        h2 = make_hand(mcp=(50, 50), side=HandSide.LEFT)
+        roi = make_roi("Montagem", 0, 0, 200, 200)
+
+        m.update([(h1, roi)], _T0)
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.1))
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.2))
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.8))
+
+        assert m.update([(h1, roi)], _T0 + timedelta(seconds=0.9)) is None
+        event = m.update([(h1, roi)], _T0 + timedelta(seconds=1.2))
+
+        assert event is not None
+        assert event.zone_name == "Montagem"
+        assert event.was_forced is False
+        assert event.duration == timedelta(seconds=1.0)
+
+    def test_one_hand_leaves_two_hand_dwell_records_diagnostic(self):
+        m = _make_two_hands_machine()
+        h1 = make_hand(mcp=(50, 50), side=HandSide.RIGHT)
+        h2 = make_hand(mcp=(50, 50), side=HandSide.LEFT)
+        roi = make_roi("Montagem", 0, 0, 200, 200)
+
+        m.update([(h1, roi)], _T0)
+        m.update([(h1, roi), (h2, roi)], _T0 + timedelta(seconds=0.1))
+        m.update([(h1, roi)], _T0 + timedelta(seconds=0.2))
+
+        diagnostics = m.pop_diagnostics()
+        assert len(diagnostics) == 1
+        assert diagnostics[0].zone_name == "Montagem"
+        assert diagnostics[0].reason == REASON_LEFT_BEFORE_VALIDATION_TIME
 
 
 # --- TaskStateMachine ---
@@ -237,3 +345,17 @@ class TestTaskStateMachine:
         tsm.update([], _T0 + timedelta(seconds=1.0))  # task concluída
 
         assert tsm.current_state() == TaskState.IDLE
+
+    def test_exposes_diagnostics_from_active_machine(self):
+        tsm = self._make_orchestrator()
+        hand = make_hand(mcp=(50, 50))
+        roi = make_roi("Porca", 0, 0, 200, 200)
+
+        tsm.update([(hand, roi)], _T0)
+        tsm.update([], _T0 + timedelta(seconds=0.1))
+
+        diagnostics = tsm.pop_diagnostics()
+        assert len(diagnostics) == 1
+        assert diagnostics[0].zone_name == "Porca"
+        assert diagnostics[0].reason == REASON_LEFT_BEFORE_VALIDATION_TIME
+        assert tsm.pop_diagnostics() == []

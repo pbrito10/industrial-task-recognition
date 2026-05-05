@@ -259,54 +259,16 @@ def correr_ensaio_gravado(config):
     correr_programa(config, duration_seconds=duration_seconds)
 
 
-def analisar_sessao(config):
-    """Lista os CSVs de debug disponíveis e gera a tabela de anomalias para o escolhido."""
-    from analysis.session_analysis import build_table, _save_table
-    from src.output.session_output import debug_csv_paths, relative_to_output_root
-    from src.output.session_config_snapshot import snapshot_path_for_csv
-    from src.tracking.order_matching import RESULT_IN_ORDER
-
-    output_dir = Path(config["output"]["excel_output_dir"])
-    csvs       = debug_csv_paths(config)
-
-    if not csvs:
-        print(f"Nenhum ficheiro de sessão encontrado em '{output_dir}'.")
-        return
-
-    print("\nFicheiros disponíveis:")
-    for i, csv_path in enumerate(csvs, start=1):
-        print(f"  {i}. {relative_to_output_root(csv_path, config)}")
-
-    escolha = input("Escolha (número): ").strip()
-    if not escolha.isdigit() or not (1 <= int(escolha) <= len(csvs)):
-        print("Opção inválida.")
-        return
-
-    csv_path = csvs[int(escolha) - 1]
-    print(f"A analisar {relative_to_output_root(csv_path, config)}...")
-
-    table  = build_table(csv_path)
-    output = _save_table(table, csv_path)
-
-    if not snapshot_path_for_csv(csv_path).exists():
-        print("Aviso: snapshot de configuração da sessão não encontrado; usada a config atual.")
-
-    total    = len(table)
-    corretos = (table["Resultado do sistema"] == RESULT_IN_ORDER).sum()
-    print(f"Tabela guardada: {output.name}")
-    print(f"Total: {total} ciclos  |  Em ordem: {corretos}  |  A rever: {total - corretos}")
-
-
 _OPCOES = {
     "1": ("Testar câmara",          testar_camera),
     "2": ("Definir ROIs",           definir_rois),
     "3": ("Correr programa",        correr_programa),
     "4": ("Correr ensaio gravado",  correr_ensaio_gravado),
-    "5": ("Analisar sessão",        analisar_sessao),
 }
 
 
 def main():
+    """Carrega config, mostra o menu e encaminha a opção escolhida."""
     with open(_CONFIG_PATH, encoding="utf-8") as f:
         config = validate_config(yaml.safe_load(f))
 
