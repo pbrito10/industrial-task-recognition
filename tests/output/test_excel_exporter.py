@@ -127,6 +127,7 @@ def test_zone_metrics_has_porca_row(exporter, tmp_path):
     ws  = wb["Métricas por Zona"]
     # linha 2 = primeira linha de dados
     assert ws.cell(row=2, column=1).value == "Porca"
+    assert ws.cell(row=1, column=1).value == "Tarefa/Zona"
 
 
 def test_zone_metrics_bottleneck_highlighted(exporter, tmp_path):
@@ -251,6 +252,8 @@ def test_events_written_after_add_event(exporter, tmp_path):
     wb = _open_workbook(tmp_path)
     ws = wb["Eventos"]
     assert ws.max_row == 3  # header + 2 eventos
+    assert ws.cell(row=1, column=2).value == "Tarefa/Zona"
+    assert ws.cell(row=1, column=3).value == "Tipo"
 
 
 def test_events_forced_label(exporter, tmp_path):
@@ -258,7 +261,7 @@ def test_events_forced_label(exporter, tmp_path):
     exporter.write(_snapshot())
     wb     = _open_workbook(tmp_path)
     ws     = wb["Eventos"]
-    values = [ws.cell(row=r, column=6).value for r in range(2, ws.max_row + 1)]
+    values = [ws.cell(row=r, column=7).value for r in range(2, ws.max_row + 1)]
     assert "Sim" in values
 
 
@@ -267,8 +270,18 @@ def test_events_not_forced_label(exporter, tmp_path):
     exporter.write(_snapshot())
     wb     = _open_workbook(tmp_path)
     ws     = wb["Eventos"]
-    values = [ws.cell(row=r, column=6).value for r in range(2, ws.max_row + 1)]
+    values = [ws.cell(row=r, column=7).value for r in range(2, ws.max_row + 1)]
     assert "Não" in values
+
+
+def test_events_interruption_type_without_forced_label(exporter, tmp_path):
+    exporter.add_event(_event("Montagem sem peça"), counts_as_interruption=True)
+    exporter.write(_snapshot())
+    wb = _open_workbook(tmp_path)
+    ws = wb["Eventos"]
+
+    assert ws.cell(row=2, column=3).value == "Interrupção"
+    assert ws.cell(row=2, column=7).value == "Não"
 
 
 # --- Headers a bold ---

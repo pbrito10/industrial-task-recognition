@@ -89,7 +89,7 @@ def _render_time_breakdown(data: dict) -> None:
 
 def _render_cycle_trend(data: dict) -> None:
     """Gráfico com a duração dos últimos ciclos completos."""
-    st.subheader("Últimos 10 Ciclos")
+    st.subheader("Gráfico de tendência dos ciclos")
 
     recent_cycles = data.get("cycle_metrics", {}).get("recent_cycles", [])
     if not recent_cycles:

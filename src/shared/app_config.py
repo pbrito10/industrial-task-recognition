@@ -32,6 +32,8 @@ class TrackingConfig(TypedDict):
     zones: list[str]
     two_hands_zones: list[str]
     two_hands_missing_tolerance_seconds: float
+    assembly_zone: str
+    assembly_task_labels: dict[str, str]
     cycle_zone_order: list[str]
     exit_zone: str
     detection_gap_threshold_s: float
@@ -96,9 +98,12 @@ def validate_config(raw: Any) -> AppConfig:
     _require_list(tracking, "zones", str)
     _require_list(tracking, "two_hands_zones", str)
     _require_number(tracking, "two_hands_missing_tolerance_seconds")
+    _require_type(tracking, "assembly_zone", str)
+    _require_string_mapping(tracking, "assembly_task_labels")
     _require_list(tracking, "cycle_zone_order", str)
     _require_type(tracking, "exit_zone", str)
     _require_number(tracking, "detection_gap_threshold_s")
+    _validate_tracking_semantics(tracking)
 
     dashboard = raw["dashboard"]
     _require_type(dashboard, "data_path", str)
@@ -133,3 +138,23 @@ def _require_list(config: dict, key: str, item_type: type) -> None:
         raise ValueError(f"Config inválida: '{key}' deve ser uma lista.")
     if not all(isinstance(item, item_type) for item in config[key]):
         raise ValueError(f"Config inválida: todos os valores de '{key}' devem ser {item_type.__name__}.")
+
+
+def _require_string_mapping(config: dict, key: str) -> None:
+    if key not in config or not isinstance(config[key], dict):
+        raise ValueError(f"Config inválida: '{key}' deve existir e ser um mapa.")
+    if not all(isinstance(source, str) and isinstance(label, str) for source, label in config[key].items()):
+        raise ValueError(f"Config inválida: '{key}' deve mapear strings para strings.")
+
+
+def _validate_tracking_semantics(tracking: dict) -> None:
+    zones = set(tracking["zones"])
+    assembly_zone = tracking["assembly_zone"]
+
+    if assembly_zone not in zones:
+        raise ValueError(f"Config inválida: assembly_zone '{assembly_zone}' não existe em tracking.zones.")
+
+    unknown_sources = set(tracking["assembly_task_labels"]) - zones
+    if unknown_sources:
+        unknown = ", ".join(sorted(unknown_sources))
+        raise ValueError(f"Config inválida: assembly_task_labels referencia zonas desconhecidas: {unknown}.")

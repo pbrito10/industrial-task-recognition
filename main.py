@@ -55,38 +55,20 @@ def run_pipeline(detection_queue, stop_event, config, roi_path):
     monitor_process.run(detection_queue, stop_event, config, roi_path)
 
 
-def _format_duration(seconds: int | float) -> str:
-    minutes   = int(seconds // 60)
-    remaining = int(seconds % 60)
-    if minutes and remaining:
-        return f"{minutes} min {remaining} s"
-    if minutes:
-        return f"{minutes} min"
-    return f"{remaining} s"
-
-
-def _start_processes(processos: dict, duration_seconds: int | None = None) -> None:
+def _start_processes(processos: dict) -> None:
     """Inicia todos os processos do dicionário com delay de 0.5 s entre cada um."""
     print("A arrancar processos...")
     for nome, processo in processos.items():
         processo.start()
         time.sleep(0.5)
         print(f"  [{nome}] iniciado (PID {processo.pid})")
-    if duration_seconds is None:
-        print("A correr. Carrega 'q' na janela para parar.\n")
-    else:
-        print(f"A correr durante {_format_duration(duration_seconds)}. Carrega 'q' para parar antes.\n")
+    print("A correr. Carrega 'q' na janela para parar.\n")
 
 
-def _wait_for_stop(stop_event, duration_seconds: int | None = None) -> None:
+def _wait_for_stop(stop_event) -> None:
     """Bloqueia até stop_event ser ativado ou Ctrl+C ser pressionado."""
-    started_at = time.monotonic()
     try:
         while not stop_event.is_set():
-            if duration_seconds is not None and time.monotonic() - started_at >= duration_seconds:
-                print("\nDuração definida atingida — a fechar sessão...")
-                stop_event.set()
-                break
             time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nCtrl+C — a parar...")
@@ -103,10 +85,10 @@ def _terminate_processes(processos: dict) -> None:
     print("Processos terminados.")
 
 
-def _launch(stop_event, duration_seconds: int | None = None, **processos):
+def _launch(stop_event, **processos):
     """Arranca os processos, aguarda o sinal de paragem e termina-os."""
-    _start_processes(processos, duration_seconds)
-    _wait_for_stop(stop_event, duration_seconds)
+    _start_processes(processos)
+    _wait_for_stop(stop_event)
     _terminate_processes(processos)
 
 
@@ -175,9 +157,10 @@ def _validate_config_vs_rois(config: dict, roi_names: set[str]) -> list[str]:
 
     # Zonas referenciadas pela config que podem faltar nas ROIs
     exit_zone       = config["tracking"]["exit_zone"]
+    assembly_zone   = config["tracking"]["assembly_zone"]
     two_hands_zones = set(config["tracking"]["two_hands_zones"])
     order_zones     = set(config["tracking"]["cycle_zone_order"])
-    required        = ({exit_zone} | two_hands_zones | order_zones)
+    required        = ({exit_zone, assembly_zone} | two_hands_zones | order_zones)
 
     missing = required - roi_names
     for zone in sorted(missing):
@@ -186,7 +169,7 @@ def _validate_config_vs_rois(config: dict, roi_names: set[str]) -> list[str]:
     return errors
 
 
-def correr_programa(config, duration_seconds: int | None = None):
+def correr_programa(config):
     """Pipeline completo com tracking, métricas, dashboard e exportação Excel.
 
     O Streamlit é lançado como subprocess independente — não usa queues nem
@@ -224,7 +207,6 @@ def correr_programa(config, duration_seconds: int | None = None):
     try:
         _launch(
             stop_event,
-            duration_seconds=duration_seconds,
             camera   = Process(target=run_camera,   name="camera",
                                args=(frame_queue, stop_event, config)),
             detector = Process(target=run_detector, name="detector",
@@ -236,34 +218,10 @@ def correr_programa(config, duration_seconds: int | None = None):
         dashboard_proc.terminate()
 
 
-_ENSAIOS_GRAVADOS = {
-    "1": ("5 minutos", 5 * 60),
-    "2": ("15 minutos", 15 * 60),
-    "3": ("30 minutos", 30 * 60),
-}
-
-
-def correr_ensaio_gravado(config):
-    """Corre uma sessão gravada com duração pré-definida."""
-    print("\nDuração do ensaio:")
-    for key, (label, _) in _ENSAIOS_GRAVADOS.items():
-        print(f"  {key}. {label}")
-
-    escolha = input("Escolha: ").strip()
-    if escolha not in _ENSAIOS_GRAVADOS:
-        print("Opção inválida.")
-        return
-
-    label, duration_seconds = _ENSAIOS_GRAVADOS[escolha]
-    print(f"A preparar ensaio de {label}.")
-    correr_programa(config, duration_seconds=duration_seconds)
-
-
 _OPCOES = {
     "1": ("Testar câmara",          testar_camera),
     "2": ("Definir ROIs",           definir_rois),
     "3": ("Correr programa",        correr_programa),
-    "4": ("Correr ensaio gravado",  correr_ensaio_gravado),
 }
 
 

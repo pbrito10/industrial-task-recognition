@@ -38,6 +38,13 @@ tracking:
   two_hands_missing_tolerance_seconds: 0.3
                                  # tempo máximo que uma zona de duas mãos tolera
                                  # só uma mão visível antes de fechar a tarefa
+  assembly_zone: "Montagem"      # zona física que recebe nomes de análise por peça montada
+  assembly_task_labels:           # nome usado nas métricas/Excel/dashboard após cada peça
+    "Chassi Inferior": "Montagem Chassi Inferior"
+    "Porca": "Montagem Porca"
+    "Rodas": "Montagem Rodas"
+    "Chassi Superior": "Montagem Chassi Superior"
+    "Parafuso": "Montagem Parafuso"
   cycle_zone_order:              # ordem esperada das zonas num ciclo completo
                                  # a Zona das Rodas pode aparecer 1 a 4 vezes
                                  # dependendo de quantas rodas o operador traz de cada vez

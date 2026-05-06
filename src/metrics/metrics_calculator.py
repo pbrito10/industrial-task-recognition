@@ -15,6 +15,8 @@ class MetricsCalculator:
     A separação produtivo/interrupção é feita aqui com base em was_forced:
       - False → tarefa concluída normalmente → tempo produtivo
       - True  → tarefa fechada por timeout   → tempo de interrupção
+    Também aceita interrupções explícitas, por exemplo uma Montagem detetada
+    sem peça anterior no ciclo.
 
     O tempo de transição não é medido diretamente — é o que sobra:
     sessão total − produtivo − interrupção. Pode incluir tempo entre zonas,
@@ -34,7 +36,7 @@ class MetricsCalculator:
     def record(self, event: TaskEvent) -> None:
         """Integra uma tarefa nas métricas produtivas ou de interrupção."""
         if event.was_forced:
-            self._interruption_time += event.duration
+            self.record_interruption(event.duration)
             return
 
         self._productive_time += event.duration
@@ -46,6 +48,10 @@ class MetricsCalculator:
             self._task_metrics[event.zone_name] = TaskMetrics()
 
         self._task_metrics[event.zone_name].add(event.duration)
+
+    def record_interruption(self, duration: timedelta) -> None:
+        """Soma duração que deve contar como interrupção, sem métrica de tarefa."""
+        self._interruption_time += duration
 
     def record_cycle(self, cycle_result: CycleResult) -> None:
         """Regista as métricas de um ciclo completo (duração e se a sequência foi respeitada).

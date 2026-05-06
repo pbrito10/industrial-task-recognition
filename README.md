@@ -15,7 +15,6 @@ python main.py
 | `1` | Testar câmara com esqueleto das mãos e FPS. |
 | `2` | Definir ROIs da bancada com o rato. Deve ser feito antes de correr o pipeline. |
 | `3` | Correr o pipeline completo com dashboard, vídeo anotado, CSV e Excel. |
-| `4` | Correr ensaio gravado com duração fixa de 5, 15 ou 30 minutos. |
 
 ## Outputs da Sessão
 
@@ -60,6 +59,8 @@ Os parâmetros editáveis estão em `config/settings.yaml`.
 | `tracking.stillness_threshold_px` | Velocidade máxima do centróide MCP para considerar a mão parada. |
 | `tracking.two_hands_zones` | Zonas que exigem duas mãos, como `Montagem`. |
 | `tracking.two_hands_missing_tolerance_seconds` | Tolerância a oclusões curtas em zonas de duas mãos. |
+| `tracking.assembly_zone` | Zona física de montagem que recebe nomes mais específicos na análise. |
+| `tracking.assembly_task_labels` | Mapeia a peça anterior para nomes como `Montagem Porca`; montagem sem peça anterior conta como interrupção. |
 | `tracking.cycle_zone_order` | Ordem esperada das zonas num ciclo. |
 | `tracking.exit_zone` | Zona que fecha o ciclo quando concluída. |
 | `output.record_video` | Liga/desliga gravação do vídeo anotado. |
@@ -82,4 +83,3 @@ As coordenadas das ROIs ficam em `config/rois.json`, gerado pela opção `2`.
 ```
 
 A suite cobre deteção, ROIs, tracking, métricas, outputs, vídeo, config e logging.
-

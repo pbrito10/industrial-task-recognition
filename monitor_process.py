@@ -181,6 +181,7 @@ class _MonitorSession:
         from src.roi.json_roi_repository import JsonRoiRepository
         from src.tracking.activation_strategy import StillnessDwellStrategy
         from src.tracking.cycle_tracker import CycleTracker
+        from src.tracking.task_labeler import TaskLabeler
         from src.tracking.zone_classifier import ZoneClassifier
         from src.video.frame_annotator import ZoneColorScheme
 
@@ -223,6 +224,10 @@ class _MonitorSession:
             color_scheme=self._color_scheme,
         )
         self._metrics          = MetricsCalculator(self._session_start, config["tracking"]["zones"])
+        self._task_labeler     = TaskLabeler(
+            assembly_zone=config["tracking"]["assembly_zone"],
+            labels_by_previous_zone=config["tracking"]["assembly_task_labels"],
+        )
         self._dashboard_writer = DashboardWriter(Path(config["dashboard"]["data_path"]))
         self._excel_exporter   = ExcelExporter(self._session_output.session_dir, self._session_start)
         self._video_recorder   = VideoRecorder(
@@ -336,8 +341,15 @@ class _MonitorSession:
             task_event = self._event_in_current_cycle(task_event)
 
         self._log_task(task_event, debug_logger)
-        self._metrics.record(task_event)
-        self._excel_exporter.add_event(task_event)
+        analysis_event = self._task_labeler.label(task_event)
+        if analysis_event.counts_as_interruption:
+            self._metrics.record_interruption(analysis_event.event.duration)
+        else:
+            self._metrics.record(analysis_event.event)
+        self._excel_exporter.add_event(
+            analysis_event.event,
+            counts_as_interruption=analysis_event.counts_as_interruption,
+        )
 
         if cycle_result is not None:
             self._record_cycle_result(cycle_result, debug_logger)

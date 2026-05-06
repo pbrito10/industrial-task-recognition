@@ -60,14 +60,21 @@ pontas dos dedos durante grasping.
 - uma nova primeira zona esperada aparece depois de já haver progresso, fechando
   o ciclo anterior como incompleto/a rever.
 
+`TaskLabeler` corre depois do `CycleTracker` e antes das métricas. Mantém a
+zona física `Montagem` no CSV/debug e na validação de ciclos, mas troca o nome
+do evento usado na análise por etiquetas configuráveis como `Montagem Porca`
+ou `Montagem Rodas`, com base na peça imediatamente anterior no mesmo ciclo.
+Quando uma `Montagem` aparece sem peça anterior, é marcada como `Montagem sem
+peça` e soma ao tempo de interrupção, não ao tempo produtivo.
+
 ## Outputs
 
 | Output | Escritor |
 |---|---|
 | CSV de debug | `DebugLogger` |
 | Snapshot config/ROIs | `session_config_snapshot.py` |
-| Dashboard JSON | `DashboardWriter` |
-| Excel final | `ExcelExporter` |
+| Dashboard JSON | `DashboardWriter` com nomes de análise do `TaskLabeler` |
+| Excel final | `ExcelExporter` com nomes de análise do `TaskLabeler` |
 | Vídeo anotado | `VideoRecorder` |
 
 `DashboardWriter` usa escrita atómica com ficheiro temporário para impedir que
@@ -79,4 +86,3 @@ o Streamlit leia JSON parcial.
 - Funções privadas só recebem docstring quando a intenção não é óbvia pelo nome.
 - Comentários dentro do código devem explicar decisões ou regras de negócio, não
   repetir linha a linha o que o código já diz.
-

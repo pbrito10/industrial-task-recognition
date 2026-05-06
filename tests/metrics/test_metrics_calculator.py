@@ -36,6 +36,13 @@ def test_forced_event_goes_to_interruption(calc):
     assert snap.productive_time == timedelta(0)
 
 
+def test_manual_interruption_is_not_productive(calc):
+    calc.record_interruption(timedelta(seconds=4))
+    snap = calc.snapshot()
+    assert snap.interruption_time == timedelta(seconds=4)
+    assert snap.productive_time == timedelta(0)
+
+
 def test_normal_event_goes_to_productive(calc):
     calc.record(_event("Porca", 5.0))
     snap = calc.snapshot()
@@ -57,6 +64,12 @@ def test_forced_event_not_in_task_metrics(calc):
     calc.record(_event("Porca", 10.0, forced=True))
     snap = calc.snapshot()
     assert snap.task_metrics["Porca"].count() == 0
+
+
+def test_manual_interruption_not_in_task_metrics(calc):
+    calc.record_interruption(timedelta(seconds=4))
+    snap = calc.snapshot()
+    assert all(metrics.count() == 0 for metrics in snap.task_metrics.values())
 
 
 def test_unknown_zone_creates_entry(calc):

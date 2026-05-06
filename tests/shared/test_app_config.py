@@ -31,6 +31,8 @@ def _config():
             "zones": ["Porca", "Montagem", "Saida"],
             "two_hands_zones": ["Montagem"],
             "two_hands_missing_tolerance_seconds": 0.3,
+            "assembly_zone": "Montagem",
+            "assembly_task_labels": {"Porca": "Montagem Porca"},
             "cycle_zone_order": ["Porca", "Montagem", "Saida"],
             "exit_zone": "Saida",
             "detection_gap_threshold_s": 1.0,
@@ -71,6 +73,30 @@ def test_validate_config_rejects_wrong_type():
 def test_validate_config_requires_two_hands_missing_tolerance():
     config = _config()
     del config["tracking"]["two_hands_missing_tolerance_seconds"]
+
+    with pytest.raises(ValueError):
+        validate_config(config)
+
+
+def test_validate_config_requires_assembly_task_labels():
+    config = _config()
+    del config["tracking"]["assembly_task_labels"]
+
+    with pytest.raises(ValueError):
+        validate_config(config)
+
+
+def test_validate_config_rejects_unknown_assembly_zone():
+    config = _config()
+    config["tracking"]["assembly_zone"] = "Zona Fantasma"
+
+    with pytest.raises(ValueError):
+        validate_config(config)
+
+
+def test_validate_config_rejects_unknown_assembly_label_source():
+    config = _config()
+    config["tracking"]["assembly_task_labels"] = {"Zona Fantasma": "Montagem Fantasma"}
 
     with pytest.raises(ValueError):
         validate_config(config)
