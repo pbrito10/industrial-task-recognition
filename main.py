@@ -236,6 +236,7 @@ def main():
             print(f"  {key}. {nome}")
         print("  0. Sair")
 
+
         escolha = input("Escolha: ").strip()
 
         if escolha == "0":

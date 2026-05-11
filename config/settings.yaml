@@ -48,9 +48,9 @@ tracking:
   cycle_zone_order:              # ordem esperada das zonas num ciclo completo
                                  # a Zona das Rodas pode aparecer 1 a 4 vezes
                                  # dependendo de quantas rodas o operador traz de cada vez
-    - "Chassi Inferior"
-    - "Montagem"
     - "Porca"
+    - "Montagem"
+    - "Chassi Inferior"
     - "Montagem"
     - "Rodas"
     - "Montagem"
