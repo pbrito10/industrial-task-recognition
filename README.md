@@ -16,6 +16,41 @@ python main.py
 | `2` | Definir ROIs da bancada com o rato. Deve ser feito antes de correr o pipeline. |
 | `3` | Correr o pipeline completo com dashboard, vídeo anotado, CSV e Excel. |
 
+## Docker com Câmara e GUI
+
+Esta configuração corre o menu principal dentro do container, com acesso à
+câmara USB e às janelas gráficas do OpenCV via X11.
+
+Antes de arrancar, permite temporariamente que containers locais usem o ecrã:
+
+```bash
+xhost +local:root
+```
+
+Depois corre a aplicação:
+
+```bash
+docker compose run --rm --service-ports app
+```
+
+Se a câmara não for `/dev/video0`, indica o dispositivo:
+
+```bash
+VIDEO_DEVICE=/dev/video2 docker compose run --rm --service-ports app
+```
+
+Quando escolheres a opção `3`, o dashboard Streamlit fica disponível em:
+
+```text
+http://localhost:8501
+```
+
+No fim, podes fechar novamente o acesso X11:
+
+```bash
+xhost -local:root
+```
+
 ## Outputs da Sessão
 
 Cada execução cria uma pasta em:

@@ -18,7 +18,7 @@ python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 six==1.17.0
 sounddevice==0.5.5
-pandas
-openpyxl
-streamlit
-pytest
+pandas==3.0.2
+openpyxl==3.1.5
+streamlit==1.56.0
+pytest==9.0.3
